@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 
-from tiosutils import TiosXTCWriter, TiosNCWriter
+from .tiosutils import TiosXTCWriter, TiosNCWriter
+from ._version import __version__
 from tqdm import tqdm
 from argparse import ArgumentParser
 from pathlib import Path
 import sys
 import signal
 
-sys.tracebacklimit = 0
-class GracefulKiller:
-  kill_now = False
-  def __init__(self):
-    signal.signal(signal.SIGINT, self.exit_gracefully)
-    signal.signal(signal.SIGTERM, self.exit_gracefully)
 
-  def exit_gracefully(self, signum, frame):
-    self.kill_now = True
+sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
+
+
+class GracefulKiller:
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signum, frame):
+        self.kill_now = True
 
 
 def tios_write_cli():
@@ -33,6 +38,7 @@ def tios_write_cli():
                         help="The port number of the MQTT broker.")
     parser.add_argument("--max_frames", type=int, default=None,
                         help="Maximum number of frames to write.")
+    parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args()
 
     mqtt_broker = args.mqtt_broker

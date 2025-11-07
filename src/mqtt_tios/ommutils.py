@@ -4,7 +4,7 @@ import json
 from io import StringIO
 
 import numpy as np
-from mqttutils import MqttWriter
+from .mqttutils import MqttWriter
 import sys
 
 from openmm import XmlSerializer, LangevinMiddleIntegrator

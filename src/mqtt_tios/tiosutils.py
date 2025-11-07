@@ -2,7 +2,7 @@ import zlib
 import numpy as np
 from mdtraj.utils import box_vectors_to_lengths_and_angles
 from mdtraj.formats import NetCDFTrajectoryFile, XTCTrajectoryFile
-from mqttutils import MqttReader
+from .mqttutils import MqttReader
 
 
 class TiosXTCWriter():
