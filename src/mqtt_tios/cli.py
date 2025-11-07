@@ -67,5 +67,28 @@ def tios_write_cli():
         t.close()
 
 
-if __name__ == "__main__":
-    tios_write_cli()
+def tios_ls_cli():
+    parser = ArgumentParser(description="List available simulations"
+                            " from an MQTT broker.")
+    parser.add_argument("mqtt_broker", type=str,
+                        help="The address of the MQTT broker.")
+    parser.add_argument("--port", type=int, default=1883,
+                        help="The port number of the MQTT broker.")
+    parser.add_argument("--timeout", type=int, default=5,
+                        help="Timeout in seconds for waiting for simulations.")
+    parser.add_argument("--version", action="version", version=__version__)
+    args = parser.parse_args()
+
+    mqtt_broker = args.mqtt_broker
+    port = args.port
+
+    from .tiosutils import list_simulations
+    simulations = list_simulations(mqtt_broker, port=port,
+                                   timeout=args.timeout,
+                                   patient=False)
+    if simulations:
+        print("Available simulations:")
+        for sim in simulations:
+            print(f" - {sim[0]}: {sim[1]}")
+    else:
+        print("No simulations found.")

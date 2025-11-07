@@ -98,3 +98,20 @@ class TiosNCWriter():
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
+
+
+def list_simulations(broker_address, port=1883, timeout=10, patient=False):
+    from .mqttutils import MqttReader
+    subscription = "tios/+/summary"
+    reader = MqttReader(broker_address, subscription, port=port,
+                        timeout=timeout, patient=patient)
+    simulations = []
+    while True:
+        msg = reader.readmessage()
+        if msg is None:
+            break
+        sim_id = msg.topic.split('/')[1]
+        sim_info = msg.payload.decode('utf-8')
+        simulations.append((sim_id, sim_info))
+    reader.close()
+    return simulations
