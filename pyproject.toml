@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[project]
+name = "mqtt_tios"
+dynamic = ['version']
+description = "The Internet of Simulations."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+license-files = ["LICENSE"]
+keywords = [
+    "molecular dynamics",
+    "simulation",
+    "internet of things",
+    "mqtt"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+authors = [
+    {name = "Charlie Laughton", email = "charles.laughton@nottingham.ac.uk"}
+    ]
+dependencies = [
+    "numpy",
+    "mdtraj",
+    "openmm",
+    "paho-mqtt",
+    "tqdm"
+]
+[project.scripts]
+tios_write = "mqtt_tios/.cli_scripts:tios_write_cli"
+
+[tool.hatch.metadata.hooks.custom]
