@@ -15,7 +15,8 @@ class TiosXTCWriter():
         self.xtcfilename = xtcfilename
 
         self._reader = MqttReader(broker_address, self.subscription,
-                                  port=port, timeout=timeout)
+                                  port=port, timeout=timeout,
+                                  client_id="xtc_writer")
         self.xtcfile = None
         self.framebuffer = None
         self.saved_frames = 0
@@ -61,7 +62,8 @@ class TiosNCWriter():
         self.ncfilename = ncfilename
 
         self._reader = MqttReader(broker_address, self.subscription,
-                                  port=port, timeout=timeout)
+                                  port=port, timeout=timeout,
+                                  client_id="nc_writer")
         self.ncfile = None
         self.framebuffer = None
         self.saved_frames = 0
@@ -104,7 +106,8 @@ def list_simulations(broker_address, port=1883, timeout=10, patient=False):
     from .mqttutils import MqttReader
     subscription = "tios/+/summary"
     reader = MqttReader(broker_address, subscription, port=port,
-                        timeout=timeout, patient=patient)
+                        timeout=timeout, patient=patient,
+                        client_id='tios_ls')
     simulations = []
     while True:
         msg = reader.readmessage()

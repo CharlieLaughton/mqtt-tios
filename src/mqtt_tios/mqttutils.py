@@ -1,13 +1,20 @@
 import paho.mqtt.client as mqtt
 from queue import SimpleQueue, Empty
+import string
+import random
 
+# Generate a random client ID
+alphabet = string.ascii_lowercase + string.digits
+def random_choice():
+    return ''.join(random.choices(alphabet, k=6))
 
 class MqttWriter():
     """Class for writing messages to an MQTT broker."""
 
     def __init__(self, broker_address, default_topic,
                  port=1883, verbose=False,
-                 username=None, password=None):
+                 username=None, password=None,
+                 client_id=None):
         """Initialize the MQTT writer.
 
         Args:
@@ -17,13 +24,19 @@ class MqttWriter():
             verbose (bool): If True, print debug information.
             username (str): Username for MQTT authentication.
             password (str): Password for MQTT authentication.
+            client_id (str): Client ID for MQTT connection, a random ID is appended.
         """
         self._broker_address = broker_address
         self._default_topic = default_topic
         self._port = port
         self.verbose = verbose
+        if client_id is None:
+            client_id = 'mqtt_writer-' + random_choice()
+        else:
+            client_id += '-' + random_choice()
 
-        self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                                   client_id=client_id)
         self._client.on_connect = self._on_connect
         self._client.username_pw_set(username=username, password=password)
 
@@ -68,7 +81,8 @@ class MqttReader():
     def __init__(self, broker_address, topic,
                  port=1883, verbose=False,
                  username=None, password=None,
-                 patient=True, timeout=60):
+                 patient=True, timeout=60,
+                 client_id=None):
         """Initialize the MQTT reader.
 
         Args:
@@ -80,6 +94,7 @@ class MqttReader():
             password (str): Password for MQTT authentication.
             patient (bool): If True, wait indefinitely for the first message.
             timeout (int): Timeout in seconds for reading messages.
+            client_id (str): Client ID for MQTT connection, a random ID is appended.
         """
         self._broker_address = broker_address
         self._topic = topic
@@ -87,8 +102,13 @@ class MqttReader():
         self.verbose = verbose
         self.patient = patient
         self.timeout = timeout
+        if client_id is None:
+            client_id = 'mqtt_reader-' + random_choice()
+        else:
+            client_id += '-' + random_choice()
 
-        self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                                    client_id=client_id)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.username_pw_set(username=username, password=password),

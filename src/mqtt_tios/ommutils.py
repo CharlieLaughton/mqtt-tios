@@ -146,7 +146,8 @@ class MqttReporter():
         try:
             self._writer = MqttWriter(self._brokerAddress, self.state_topic,
                                       port=self._port,
-                                      username=username, password=password)
+                                      username=username, password=password,
+                                      client_id=self._simId)
         except ConnectionError as e:
             raise e.with_traceback(None) from None
 
