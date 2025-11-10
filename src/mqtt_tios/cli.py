@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import datetime
 from .tiosutils import TiosXTCWriter, TiosNCWriter
 from ._version import __version__
 from tqdm import tqdm
@@ -7,9 +8,10 @@ from argparse import ArgumentParser
 from pathlib import Path
 import sys
 import signal
+from datetime import datetime, timedelta
 
 
-sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
+#. sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
 
 
 class GracefulKiller:
@@ -82,13 +84,44 @@ def tios_ls_cli():
     mqtt_broker = args.mqtt_broker
     port = args.port
 
-    from .tiosutils import list_simulations
-    simulations = list_simulations(mqtt_broker, port=port,
+    from .tiosutils import get_simulations
+    now = datetime.now()
+    simulations = get_simulations(mqtt_broker, port=port,
                                    timeout=args.timeout,
                                    patient=False)
-    if simulations:
+    if len(simulations ) > 0:
         print("Available simulations:")
-        for sim in simulations:
-            print(f" - {sim[0]}: {sim[1]}")
+        running = {}
+        stopped = {}
+        for s in simulations:
+            if simulations[s]['is_running']:
+                running[s] = simulations[s]
+            else:
+                stopped[s] = simulations[s]
+        if len(running) > 0:
+            print("Running simulations:")
+            running = {k: v for k, v in sorted(running.items(), key=lambda item: item[1]['last_update'], reverse=True)}
+            for simId, simData in running.items():
+                summary = simData['summary']
+                last_update = datetime.fromtimestamp(simData['last_update'])
+                print(f" - {simId}: {summary} (last update: {last_update})")
+        if len(stopped) > 0:
+            print("Stopped simulations:")
+            stopped = {k: v for k, v in sorted(stopped.items(), key=lambda item: item[1]['last_update'], reverse=True)}
+            for simId, simData in stopped.items():
+                summary = simData['summary']
+                last_update = datetime.fromtimestamp(simData['last_update'])
+                interval = (now - last_update)
+                if interval.days > 0:
+                    interval = f"{interval.days} days"
+                elif interval.seconds >= 3600:
+                    hours = interval.seconds // 3600
+                    interval = f"{hours} hours"
+                elif interval.seconds >= 60:
+                    minutes = interval.seconds // 60
+                    interval = f"{minutes} minutes"
+                else:
+                    interval = f"{interval.seconds} seconds"
+                print(f" - {simId}: {summary} (last update: {interval} ago)")
     else:
         print("No simulations found.")

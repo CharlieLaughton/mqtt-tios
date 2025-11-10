@@ -4,7 +4,7 @@ import json
 from io import StringIO
 
 import numpy as np
-from .mqttutils import MqttWriter
+from .mqttutils import MqttReader, MqttWriter
 import sys
 
 from openmm import XmlSerializer, LangevinMiddleIntegrator
@@ -14,36 +14,14 @@ from openmm.unit import kelvin, picosecond
 sys.tracebacklimit = None  # suppress traceback for ConnectionError
 
 
-def get_compressed_state(simulation):
-    """Get the compressed state of the simulation.
-
-    Used for checkpointing and restarting simulations.
-
-    Args:
-        simulation: An OpenMM simulation object.
-    Returns:
-        bytes: Compressed state data.
-
-    """
-    f = StringIO()
-    simulation.saveState(f)
-    f.seek(0)
-    state = {
-        'statedata': f.read(),
-        'timestamp': time.time()
-    }
-    statez = zlib.compress(json.dumps(state).encode('utf-8'))
-    return statez
-
-
-def get_compressed_simulation(simulation):
-    """Get the compressed metadata of the simulation.
+def serialize_simulation(simulation):
+    """Serialize an OpenMM simulation.
 
     Used for reconstructing simulations.
     Args:
         simulation: An OpenMM simulation object.
     Returns:
-        bytes: Compressed metadata.
+        bytes: serialized simulation with current state.
 
     """
     st = simulation.context.getState(positions=True)
@@ -52,65 +30,210 @@ def get_compressed_simulation(simulation):
     f.seek(0)
     pdbdata = f.read()
 
-    if isinstance(simulation.integrator, LangevinMiddleIntegrator):
-        integrator_code = 'LMI'
-    else:
-        integrator_code = 'unknown'
+    f = StringIO('')
+    simulation.saveState(f)
+    f.seek(0)
+    statedata = f.read()
 
-    metadata = {'integrator': integrator_code,
-                'temperature': simulation.integrator.getTemperature() / kelvin,
-                'friction': simulation.integrator.getFriction() * picosecond,
-                'timestep': simulation.integrator.getStepSize() / picosecond,
+    metadata = {'integrator': XmlSerializer.serialize(simulation.integrator),
                 'system': XmlSerializer.serialize(simulation.system),
-                'pdb': pdbdata
+                'pdbdata': pdbdata,
+                'statedata': statedata
                 }
 
-    metadataz = zlib.compress(json.dumps(metadata).encode('utf-8'))
-    return metadataz
+    return json.dumps(metadata).encode('utf-8')
 
 
-def get_uncompressed_simulation(simulationz):
+def deserialize_simulation(simulation_data):
     """Get the uncompressed simulation from metadata.
     Args:
-        simulationz (bytes): Compressed simulation metadata.
+        simulation_data (bytes): serialized simulation data.
     Returns:
         simulation: An OpenMM simulation object.
 
     """
-    metadata = json.loads(zlib.decompress(simulationz))
-    assert metadata['integrator'] == 'LMI'
-    integrator = LangevinMiddleIntegrator(metadata['temperature']*kelvin,
-                                          metadata['friction']/picosecond,
-                                          metadata['timestep']*picosecond)
+    metadata = json.loads(simulation_data)
+    integrator = XmlSerializer.deserialize(metadata['integrator'])
     system = XmlSerializer.deserialize(metadata['system'])
-    f = StringIO(metadata['pdb'])
+    f = StringIO(metadata['pdbdata'])
     f.seek(0)
     pdb = PDBFile(f)
     simulation = Simulation(pdb.topology, system, integrator)
+    f = StringIO(metadata['statedata'])
+    f.seek(0)
+    simulation.loadState(f)
     return simulation
 
 
-def get_uncompressed_state(statez):
-    """Get the uncompressed state from a compressed state.
+class TiosMqttClient():
+    """A base class for MQTT clients used in TIOS OpenMM utilities."""
+    def __init__(self, brokerAddress, port=1883,
+                 username=None, password=None, client_id=None):
+        """Initialize the MQTT client.
+        Parameters
+        ----------
+        brokerAddress : str
+            The address of the MQTT broker.
+        port : int, optional
+            The port number of the MQTT broker.
+        username : str, optional
+            The username for MQTT authentication.
+        password : str, optional
+            The password for MQTT authentication.
+        client_id : str, optional
+            The client identifier for the MQTT connection.
+        """
+        self._brokerAddress = brokerAddress
+        self._port = port
+        self._username = username
+        self._password = password
+        self._client_id = client_id
 
-    Args:
-        statez (bytes): Compressed state data.
+        self.simId = None
 
-    Returns:
-        statedata: The uncompressed state data.
-        timestamp: The timestamp of the state.
+    def check_exists(self, simId):
+        """Check if a simulation with the given ID exists.
 
-    """
-    state = json.loads(zlib.decompress(statez))
-    statedata = state['statedata']
-    ts = state['timestamp']
-    return statedata, ts
+        Parameters
+        ----------
+        simId : str
+            A unique identifier for the simulation.
 
+        Returns
+        -------
+        bool
+            True if the simulation exists, False otherwise.
 
-class MqttReporter():
+        """
+        with MqttReader(self._brokerAddress,
+                        f'tios/{simId}/summary',
+                        port=self._port,
+                        username=self._username,
+                        password=self._password,
+                        patient=False, timeout=2,
+                        client_id='checker') as f:
+            try:
+                msg = f.readmessage()
+                if msg is None:
+                    return False
+                return True
+            except ConnectionError:
+                return False
+
+    def register_simulation(self, simId, simulation, summary=None):
+        """Register a new simulation.
+
+        Parameters
+        ----------
+        simId : str
+            A unique identifier for the simulation.
+        simulation : OpenMM Simulation
+            The OpenMM Simulation object to register.
+        summary : str, optional
+            An optional summary description of the simulation.
+
+        """
+        if self.check_exists(simId):
+            raise ValueError(f'Simulation ID {simId} is already in use.')
+        if summary is None:
+            summary = f'OpenMM simulation with {simulation.context.getSystem().getNumParticles()} atoms.'
+        with MqttWriter(self._brokerAddress,
+                        f'tios/{simId}/summary',
+                        port=self._port,
+                        username=self._username,
+                        password=self._password,
+                        client_id='registrar') as f:
+            f.writemessage(summary.encode('utf-8'), retain=True)
+        self.simId = simId
+        self.checkpoint_simulation(simulation)
+    
+    def retrieve_simulation(self, simId):
+        """Retrieve an existing simulation.
+        Parameters
+        ----------
+        simId : str
+            A unique identifier for the simulation.
+        Returns
+        ------
+        simulation : OpenMM Simulation
+            The OpenMM Simulation object for the specified simulation ID.
+        """
+        if not self.check_exists(simId):
+            raise ValueError(f'Simulation ID {simId} does not exist.')
+        with MqttReader(self._brokerAddress,
+                        f'tios/{simId}/checkpoint',
+                        port=self._port,
+                        username=self._username,
+                        password=self._password,
+                        client_id='retriever') as f:
+            try:
+                msg = f.readmessage()
+                if msg is None:
+                    raise ConnectionError('No checkpoint data received.')
+                data = zlib.decompress(msg.payload)
+                simulation = deserialize_simulation(data)
+                self.simId = simId
+                return simulation
+            except ConnectionError as e:
+                print('Error retrieving simulation:', e, flush=True,
+                        file=sys.stderr)
+        
+
+    def checkpoint_simulation(self, simulation):
+        """Checkpoint an existing simulation.
+        Parameters
+        ----------
+        simulation : OpenMM Simulation
+            The OpenMM Simulation object to checkpoint.
+        """
+        if self.simId is None:
+            raise ValueError('Simulation ID is not set. Cannot checkpoint simulation.')
+        
+        with MqttWriter(self._brokerAddress,
+                        f'tios/{self.simId}/checkpoint',
+                        port=self._port,
+                        username=self._username,
+                        password=self._password,
+                        client_id='checkpointer') as f:
+            data = serialize_simulation(simulation)
+            try:
+                f.writemessage(zlib.compress(data), retain=True)
+            except ConnectionError as e:
+                print('Error checkpointing simulation:', e, flush=True,
+                        file=sys.stderr)
+    
+    def create_reporter(self, reportInterval,
+                        enforcePeriodicBox=None):
+        """Create a TIOS MQTT reporter for the specified simulation.
+
+        Parameters
+        ----------
+        reportInterval : int
+            The interval (in steps) at which to report simulation data.
+        enforcePeriodicBox : bool, optional
+            If True, wrap coordinates to be within the periodic box.
+
+        Returns
+        -------
+        TiosMqttReporter
+            An instance of TiosMqttReporter configured for the specified simulation.
+
+        """
+        if self.simId is None:
+            raise ValueError('Simulation ID is not set. Cannot create reporter.')
+        
+        return TiosMqttReporter(self._brokerAddress, self.simId,
+                                reportInterval,
+                                enforcePeriodicBox=enforcePeriodicBox,
+                                port=self._port,
+                                username=self._username,
+                                password=self._password)
+    
+
+class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT."""
     def __init__(self, brokerAddress, simId, reportInterval,
-                 summary=None, enforcePeriodicBox=None, port=1883,
+                 enforcePeriodicBox=None, port=1883,
                  username=None, password=None):
         """Initialize the MQTT reporter.
         Parameters
@@ -121,8 +244,6 @@ class MqttReporter():
             A unique identifier for the simulation.
         reportInterval : int
             The interval (in steps) at which to report simulation data.
-        summary : str, optional
-            A summary description of the simulation.
         enforcePeriodicBox : bool, optional
             If True, wrap coordinates to be within the periodic box.
         port : int, optional
@@ -137,20 +258,14 @@ class MqttReporter():
         self._brokerAddress = brokerAddress
         self._port = port
         self._simId = simId
-        self._summary = summary
-
         self._framebuffer = None
-        self.sim_topic = f'tios/{self._simId}/simulation'
-        self.state_topic = f'tios/{self._simId}/state'
-        self.summ_topic = f'tios/{self._simId}/summary'
-        try:
-            self._writer = MqttWriter(self._brokerAddress, self.state_topic,
-                                      port=self._port,
-                                      username=username, password=password,
-                                      client_id=self._simId)
-        except ConnectionError as e:
-            raise e.with_traceback(None) from None
-
+        self._report_writer = MqttWriter(brokerAddress,
+                                        f'tios/{simId}/state',
+                                        port=port,
+                                        username=username,
+                                        password=password,
+                                        client_id='report_writer')
+        
     def describeNextReport(self, simulation):
         """Get information about the next report this object will generate.
 
@@ -184,45 +299,25 @@ class MqttReporter():
         """
         positions = state.getPositions(asNumpy=True)
         box = state.getPeriodicBoxVectors(asNumpy=True)
-        time = state.getTime().value_in_unit(picosecond)
+        t = state.getTime().value_in_unit(picosecond)
 
         if self._framebuffer is None:
-            simz = get_compressed_simulation(simulation)
-            try:
-                self._writer.writemessage(simz, topic=self.sim_topic,
-                                          retain=True)
-            except ConnectionError as e:
-                print('Error saving simulation:', e, flush=True,
-                      file=sys.stderr)
-            print('saved simulation')
             n_atoms, _ = positions.shape
-            if self._summary is None:
-                self._summary = f'OpenMM simulation of {self._simId},'
-                self._summary += f' n_atoms={n_atoms}'
-            try:
-                self._writer.writemessage(self._summary, topic=self.summ_topic,
-                                          retain=True)
-            except ConnectionError as e:
-                print('Error saving summary:', e, flush=True, file=sys.stderr)
-            print('saved summary')
             self._framebuffer = np.zeros((n_atoms + 4, 3), dtype=np.float32)
-        self._framebuffer[0, 0] = time
+        self._framebuffer[0, 0] = t
         self._framebuffer[1:4] = box
         self._framebuffer[4:] = positions
         data = zlib.compress(self._framebuffer.tobytes())
         try:
-            self._writer.writemessage(data)
+            self._report_writer.writemessage(data)
         except ConnectionError as e:
-            print('Error saving simulation snapshot:', e, flush=True,
+            print('Error publishing simulation snapshot:', e, flush=True,
                   file=sys.stderr)
-
+            
     def close(self):
         """ Close the MQTT connection
 
-        Removes the retained simulation and summary data too.
         Note: this method is not called automatically by OpenMM.
 
         """
-        self._writer.writemessage('', topic=self.sim_topic, retain=True)
-        self._writer.writemessage('', topic=self.summ_topic, retain=True)
-        self._writer.close()
+        self._report_writer.close()

@@ -26,9 +26,8 @@ class TiosXTCWriter():
         if msg is None:
             print('End of transmission')
             return
-        value = msg.payload
         self.framebuffer = np.frombuffer(
-            zlib.decompress(value),
+            zlib.decompress(msg.payload),
             dtype=np.float32).reshape((-1, 3))
         if self.xtcfile is None:
             self.xtcfile = XTCTrajectoryFile(self.xtcfilename, 'w')
@@ -102,19 +101,44 @@ class TiosNCWriter():
         self.close()
 
 
-def list_simulations(broker_address, port=1883, timeout=10, patient=False):
-    from .mqttutils import MqttReader
+def get_simulations(broker_address, port=1883, timeout=10, patient=False):
+    
+    simulations = {}
     subscription = "tios/+/summary"
-    reader = MqttReader(broker_address, subscription, port=port,
-                        timeout=timeout, patient=patient,
-                        client_id='tios_ls')
-    simulations = []
-    while True:
+    with MqttReader(broker_address, subscription, port=port,
+                    timeout=5, patient=False,
+                    client_id='tios_ls') as reader:
         msg = reader.readmessage()
-        if msg is None:
-            break
-        sim_id = msg.topic.split('/')[1]
-        sim_info = msg.payload.decode('utf-8')
-        simulations.append((sim_id, sim_info))
-    reader.close()
+        while msg is not None:
+            sim_id = msg.topic.split('/')[1]
+            simulations[sim_id] = {}
+            simulations[sim_id]['summary'] = msg.payload.decode('utf-8')
+            simulations[sim_id]['last_update'] = msg.timestamp
+            simulations[sim_id]['has_checkpoint'] = False
+            simulations[sim_id]['is_running'] = False
+            msg = reader.readmessage()
+    
+    subscription = "tios/+/checkpoint"
+    with MqttReader(broker_address, subscription, port=port,
+                    timeout=1, patient=False,
+                    client_id='tios_ls') as reader:
+        msg = reader.readmessage()
+        while msg is not None:
+            sim_id = msg.topic.split('/')[1]
+            simulations[sim_id]['has_checkpoint'] = True
+            if msg.timestamp > simulations[sim_id]['last_update']:
+                simulations[sim_id]['last_update'] = msg.timestamp
+            msg = reader.readmessage()
+
+    for sim_id in simulations.keys():
+        subscription = f"tios/{sim_id}/state"
+        with MqttReader(broker_address, subscription, port=port,
+                    timeout=5, patient=False,
+                    client_id='tios_ls') as reader:
+            msg = reader.readmessage()
+            if msg is not None:
+                simulations[sim_id]['is_running'] = True
+                if msg.timestamp > simulations[sim_id]['last_update']:
+                    simulations[sim_id]['last_update'] = msg.timestamp
+
     return simulations
