@@ -63,178 +63,52 @@ def deserialize_simulation(simulation_data):
     f.seek(0)
     simulation.loadState(f)
     return simulation
-
-
-class TiosMqttClient():
-    """A base class for MQTT clients used in TIOS OpenMM utilities."""
-    def __init__(self, brokerAddress, port=1883,
-                 username=None, password=None, client_id=None):
-        """Initialize the MQTT client.
-        Parameters
-        ----------
-        brokerAddress : str
-            The address of the MQTT broker.
-        port : int, optional
-            The port number of the MQTT broker.
-        username : str, optional
-            The username for MQTT authentication.
-        password : str, optional
-            The password for MQTT authentication.
-        client_id : str, optional
-            The client identifier for the MQTT connection.
-        """
-        self._brokerAddress = brokerAddress
-        self._port = port
-        self._username = username
-        self._password = password
-        self._client_id = client_id
-
-        self.simId = None
-
-    def check_exists(self, simId):
-        """Check if a simulation with the given ID exists.
-
-        Parameters
-        ----------
-        simId : str
-            A unique identifier for the simulation.
-
-        Returns
-        -------
-        bool
-            True if the simulation exists, False otherwise.
-
-        """
-        with MqttReader(self._brokerAddress,
-                        f'tios/{simId}/summary',
-                        port=self._port,
-                        username=self._username,
-                        password=self._password,
-                        patient=False, timeout=2,
-                        client_id='checker') as f:
-            try:
-                msg = f.readmessage()
-                if msg is None:
-                    return False
-                return True
-            except ConnectionError:
-                return False
-
-    def register_simulation(self, simId, simulation, summary=None):
-        """Register a new simulation.
-
-        Parameters
-        ----------
-        simId : str
-            A unique identifier for the simulation.
-        simulation : OpenMM Simulation
-            The OpenMM Simulation object to register.
-        summary : str, optional
-            An optional summary description of the simulation.
-
-        """
-        if self.check_exists(simId):
-            raise ValueError(f'Simulation ID {simId} is already in use.')
-        if summary is None:
-            summary = f'OpenMM simulation with {simulation.context.getSystem().getNumParticles()} atoms.'
-        with MqttWriter(self._brokerAddress,
-                        f'tios/{simId}/summary',
-                        port=self._port,
-                        username=self._username,
-                        password=self._password,
-                        client_id='registrar') as f:
-            f.writemessage(summary.encode('utf-8'), retain=True)
-        self.simId = simId
-        self.checkpoint_simulation(simulation)
-    
-    def retrieve_simulation(self, simId):
-        """Retrieve an existing simulation.
-        Parameters
-        ----------
-        simId : str
-            A unique identifier for the simulation.
-        Returns
-        ------
-        simulation : OpenMM Simulation
-            The OpenMM Simulation object for the specified simulation ID.
-        """
-        if not self.check_exists(simId):
-            raise ValueError(f'Simulation ID {simId} does not exist.')
-        with MqttReader(self._brokerAddress,
-                        f'tios/{simId}/checkpoint',
-                        port=self._port,
-                        username=self._username,
-                        password=self._password,
-                        client_id='retriever') as f:
-            try:
-                msg = f.readmessage()
-                if msg is None:
-                    raise ConnectionError('No checkpoint data received.')
-                data = zlib.decompress(msg.payload)
-                simulation = deserialize_simulation(data)
-                self.simId = simId
-                return simulation
-            except ConnectionError as e:
-                print('Error retrieving simulation:', e, flush=True,
-                        file=sys.stderr)
-        
-
-    def checkpoint_simulation(self, simulation):
-        """Checkpoint an existing simulation.
-        Parameters
-        ----------
-        simulation : OpenMM Simulation
-            The OpenMM Simulation object to checkpoint.
-        """
-        if self.simId is None:
-            raise ValueError('Simulation ID is not set. Cannot checkpoint simulation.')
-        
-        with MqttWriter(self._brokerAddress,
-                        f'tios/{self.simId}/checkpoint',
-                        port=self._port,
-                        username=self._username,
-                        password=self._password,
-                        client_id='checkpointer') as f:
-            data = serialize_simulation(simulation)
-            try:
-                f.writemessage(zlib.compress(data), retain=True)
-            except ConnectionError as e:
-                print('Error checkpointing simulation:', e, flush=True,
-                        file=sys.stderr)
-    
-    def create_reporter(self, reportInterval,
-                        enforcePeriodicBox=None):
-        """Create a TIOS MQTT reporter for the specified simulation.
-
-        Parameters
-        ----------
-        reportInterval : int
-            The interval (in steps) at which to report simulation data.
-        enforcePeriodicBox : bool, optional
-            If True, wrap coordinates to be within the periodic box.
-
-        Returns
-        -------
-        TiosMqttReporter
-            An instance of TiosMqttReporter configured for the specified simulation.
-
-        """
-        if self.simId is None:
-            raise ValueError('Simulation ID is not set. Cannot create reporter.')
-        
-        return TiosMqttReporter(self._brokerAddress, self.simId,
-                                reportInterval,
-                                enforcePeriodicBox=enforcePeriodicBox,
-                                port=self._port,
-                                username=self._username,
-                                password=self._password)
+  
+def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password=None):
+    """Retrieve an existing simulation.
+    Parameters
+    ----------
+    brokerAddress : str
+        The address of the MQTT broker.
+    simId : str
+        A unique identifier for the simulation.
+    port : int, optional
+        The port number of the MQTT broker.
+    username : str, optional
+        The username for MQTT authentication.
+    password : str, optional
+        The password for MQTT authentication.
+    Returns
+    ------
+    simulation : OpenMM Simulation
+        The OpenMM Simulation object for the specified simulation ID.
+    """
+    with MqttReader(brokerAddress,
+                    f'tios/{simId}/checkpoint',
+                    port=port,
+                    username=username,
+                    password=password,
+                    client_id='retriever') as f:
+        try:
+            msg = f.readmessage()
+            if msg is None:
+                raise ConnectionError('No checkpoint data received.')
+            data = zlib.decompress(msg.payload)
+            simulation = deserialize_simulation(data)
+            return simulation
+        except ConnectionError as e:
+            print('Error retrieving simulation:', e, flush=True,
+                    file=sys.stderr)
     
 
 class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT."""
     def __init__(self, brokerAddress, simId, reportInterval,
+                 checkpointInterval=None,
+                 summary=None,
                  enforcePeriodicBox=None, port=1883,
-                 username=None, password=None):
+                 username=None, password=None,
+                 exists_ok=False):
         """Initialize the MQTT reporter.
         Parameters
         ----------
@@ -244,6 +118,10 @@ class TiosMqttReporter():
             A unique identifier for the simulation.
         reportInterval : int
             The interval (in steps) at which to report simulation data.
+        checkpointInterval : int, optional
+            The interval (in steps) at which to checkpoint the simulation.
+        summary : str, optional
+            An optional summary description of the simulation.
         enforcePeriodicBox : bool, optional
             If True, wrap coordinates to be within the periodic box.
         port : int, optional
@@ -253,18 +131,39 @@ class TiosMqttReporter():
         password : str, optional
             The password for MQTT authentication.
         """
+        
         self._reportInterval = reportInterval
+        self._checkpointInterval = checkpointInterval
+        self._summary = summary
         self._enforcePeriodicBox = enforcePeriodicBox
         self._brokerAddress = brokerAddress
         self._port = port
         self._simId = simId
+        self._username = username
+        self._password = password
+
+        if self.check_exists(simId):
+            self._new = False
+            if not exists_ok:
+                raise ValueError(f'Simulation ID {simId} already exists.')
+        else:
+            self._new = True
+        
         self._framebuffer = None
+        self._first_report = True
         self._report_writer = MqttWriter(brokerAddress,
                                         f'tios/{simId}/state',
                                         port=port,
                                         username=username,
                                         password=password,
                                         client_id='report_writer')
+        if checkpointInterval is not None:
+            self._checkpoint_writer = MqttWriter(brokerAddress,
+                                                f'tios/{simId}/checkpoint',
+                                                port=port,
+                                                username=username,
+                                                password=password,
+                                                client_id='checkpoint_writer')
         
     def describeNextReport(self, simulation):
         """Get information about the next report this object will generate.
@@ -297,6 +196,19 @@ class TiosMqttReporter():
             The current state of the simulation
 
         """
+        if self._new:
+            self.register_simulation(self._simId, simulation, summary=self._summary)
+            self._new = False
+        
+        if self._first_report:
+            self.checkpoint_simulation(simulation)
+            self._last_checkpoint_step = simulation.currentStep
+            self._first_report = False
+        elif (self._checkpointInterval is not None and  
+              simulation.currentStep - self._last_checkpoint_step >= self._checkpointInterval):
+            self.checkpoint_simulation(simulation)
+            self._last_checkpoint_step = simulation.currentStep
+
         positions = state.getPositions(asNumpy=True)
         box = state.getPeriodicBoxVectors(asNumpy=True)
         t = state.getTime().value_in_unit(picosecond)
@@ -321,3 +233,75 @@ class TiosMqttReporter():
 
         """
         self._report_writer.close()
+
+    def check_exists(self, simId):
+        """Check if a simulation with the given ID exists.
+
+        Parameters
+        ----------
+        simId : str
+            A unique identifier for the simulation.
+
+        Returns
+        -------
+        bool
+            True if the simulation exists, False otherwise.
+
+        """
+        with MqttReader(self._brokerAddress,
+                        f'tios/{simId}/#',
+                        port=self._port,
+                        username=self._username,
+                        password=self._password,
+                        patient=False, timeout=2,
+                        client_id='checker') as f:
+            try:
+                msg = f.readmessage()
+                if msg is None:
+                    return False
+                return True
+            except ConnectionError:
+                return False
+    
+    def register_simulation(self, simId, simulation, summary=None):
+        """Register a new simulation.
+
+        Parameters
+        ----------
+        simId : str
+            A unique identifier for the simulation.
+        simulation : OpenMM Simulation
+            The OpenMM Simulation object to register.
+        summary : str, optional
+            An optional summary description of the simulation.
+
+        """
+        if self.check_exists(simId):
+            raise ValueError(f'Simulation ID {simId} is already in use.')
+        if summary is None:
+            summary = f'OpenMM simulation with {simulation.context.getSystem().getNumParticles()} atoms.'
+        with MqttWriter(self._brokerAddress,
+                        f'tios/{simId}/summary',
+                        port=self._port,
+                        username=self._username,
+                        password=self._password,
+                        client_id='registrar') as f:
+            f.writemessage(summary.encode('utf-8'), retain=True)
+        self.simId = simId
+        self.checkpoint_simulation(simulation)
+
+    def checkpoint_simulation(self, simulation):
+        """Checkpoint an existing simulation.
+        Parameters
+        ----------
+        simulation : OpenMM Simulation
+            The OpenMM Simulation object to checkpoint.
+        """
+        
+        data = serialize_simulation(simulation)
+        try:
+            self._checkpoint_writer.writemessage(zlib.compress(data), retain=True)
+        except ConnectionError as e:
+            print('Error checkpointing simulation:', e, flush=True,
+                    file=sys.stderr)
+    

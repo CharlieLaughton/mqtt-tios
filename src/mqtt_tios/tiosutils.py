@@ -1,3 +1,4 @@
+from time import sleep
 import zlib
 import numpy as np
 from mdtraj.utils import box_vectors_to_lengths_and_angles
@@ -101,44 +102,34 @@ class TiosNCWriter():
         self.close()
 
 
-def get_simulations(broker_address, port=1883, timeout=10, patient=False):
+def get_simulations(broker_address, port=1883, timeout=10):
     
     simulations = {}
-    subscription = "tios/+/summary"
+    subscription = "tios/#"
     with MqttReader(broker_address, subscription, port=port,
-                    timeout=5, patient=False,
+                    timeout=timeout, patient=False,
                     client_id='tios_ls') as reader:
-        msg = reader.readmessage()
-        while msg is not None:
-            sim_id = msg.topic.split('/')[1]
+        sleep(timeout)
+
+    msg = reader.readmessage(timeout=1)
+    while msg is not None:
+        sim_id = msg.topic.split('/')[1]
+        if not sim_id in simulations:
             simulations[sim_id] = {}
-            simulations[sim_id]['summary'] = msg.payload.decode('utf-8')
-            simulations[sim_id]['last_update'] = msg.timestamp
+            simulations[sim_id]['summary'] = None
+            simulations[sim_id]['last_update'] = 0
             simulations[sim_id]['has_checkpoint'] = False
             simulations[sim_id]['is_running'] = False
-            msg = reader.readmessage()
-    
-    subscription = "tios/+/checkpoint"
-    with MqttReader(broker_address, subscription, port=port,
-                    timeout=1, patient=False,
-                    client_id='tios_ls') as reader:
-        msg = reader.readmessage()
-        while msg is not None:
-            sim_id = msg.topic.split('/')[1]
-            simulations[sim_id]['has_checkpoint'] = True
-            if msg.timestamp > simulations[sim_id]['last_update']:
-                simulations[sim_id]['last_update'] = msg.timestamp
-            msg = reader.readmessage()
 
-    for sim_id in simulations.keys():
-        subscription = f"tios/{sim_id}/state"
-        with MqttReader(broker_address, subscription, port=port,
-                    timeout=5, patient=False,
-                    client_id='tios_ls') as reader:
-            msg = reader.readmessage()
-            if msg is not None:
-                simulations[sim_id]['is_running'] = True
-                if msg.timestamp > simulations[sim_id]['last_update']:
-                    simulations[sim_id]['last_update'] = msg.timestamp
+        if msg.timestamp > simulations[sim_id]['last_update']:
+                simulations[sim_id]['last_update'] = msg.timestamp
+        topic_type = msg.topic.split('/')[2]
+        if topic_type == 'summary':
+            simulations[sim_id]['summary'] = msg.payload.decode('utf-8')
+        elif topic_type == 'state':
+            simulations[sim_id]['is_running'] = True
+        elif topic_type == 'checkpoint':
+            simulations[sim_id]['has_checkpoint'] = True
+        msg = reader.readmessage(timeout=1)
 
     return simulations

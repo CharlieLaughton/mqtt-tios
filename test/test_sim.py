@@ -35,23 +35,22 @@ sim_id = '5fdr_A'
 # mqtt_broker = 'localhost'
 mqtt_broker = 'broker.hivemq.com'
 mqtt_port = 1883
-save_int = 500
+report_interval = 500
+checkpoint_interval = 5000
 print(f'Mqtt-reporter will publish snapshots with id "{sim_id}" to broker "{mqtt_broker}" on port {mqtt_port}.')
-client = ommutils.TiosMqttClient(mqtt_broker, port=mqtt_port)
-client.register_simulation(
+mqtt_reporter = ommutils.TiosMqttReporter(
+    mqtt_broker,
     sim_id,
-    simulation,
-    summary='MD simulation of 5fdr_A protein in water')
-print('Simulation registered with mqtt_tios broker.')
-mqtt_reporter = client.create_reporter(save_int)
+    report_interval,
+    checkpointInterval=checkpoint_interval,
+    exists_ok=True)
+
 simulation.reporters.append(mqtt_reporter)
-print('Mqtt-reporter added to simulation.')
-print('Snapshots will be published every', save_int, 'steps.')
 """ End of mqtt_tios integration """
 
 n_steps = int(input('Enter number of MD steps to run (0 = terminate): '))
 while n_steps > 0:
-    print(f'Running {n_steps} MD steps, saving data every {save_int} steps')
+    print(f'Running {n_steps} MD steps, saving data every {report_interval} steps')
     simulation.step(n_steps)
     n_steps = int(input('Enter no. of further steps to run (0 = terminate): '))
 
