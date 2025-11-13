@@ -20,15 +20,6 @@ def add_timestamp(payload):
     return payload + struct.pack('f', time.time())
 
 
-def add_eot(payload):
-    """Add an end-of-transmission (EOT) marker to the payload.
-
-    This is a negative-values timestamp."""
-    if not isinstance(payload, bytes):
-        raise ValueError('Payload must be bytes')
-    return payload + struct.pack('f', -time.time())
-
-
 def remove_timestamp(payload):
     """Remove the timestamp from the payload."""
     if not isinstance(payload, bytes) or len(payload) < 4:
@@ -87,8 +78,7 @@ class MqttWriter():
                                    client_id=client_id)
         self._client.on_connect = self._on_connect
         self._client.username_pw_set(username=username, password=password)
-        self._client.will_set(self._default_topic, payload=add_eot(b''), retain=True)
-
+        # Set last will message
         if self._status_topic is not None:
             self._client.will_set(self._status_topic, payload='offline', qos=1, retain=True)
 
@@ -120,28 +110,10 @@ class MqttWriter():
         if self.verbose:
             print(f'wrote message to {topic}: {len(payload)} bytes')
 
-    def writeeot(self, payload, topic=None):
-        """Write an end-of-transmission (EOT) message to the MQTT broker.
-        Args:
-            topic (str): The topic to publish the EOT message to. If None, uses default topic.
-        """
-        if topic is None:
-            topic = self._default_topic
-        pt = add_eot(payload)
-        result = self._client.publish(topic, pt, retain=True)
-        if result[0] != mqtt.MQTT_ERR_SUCCESS:
-            raise ConnectionError(f'Error - publish failed, result={result[0]}')
-        if self.verbose:
-            print(f'wrote EOT message to {topic}')
-
     def close(self):
         """Close the MQTT connection."""
-<<<<<<< HEAD
-        self.writeeot(b'')
-=======
         if self._status_topic is not None:
             self._client.publish(self._status_topic, payload='offline', qos=1, retain=True)
->>>>>>> 99460c1bdc0c4f0fa15e4dcb647f93ada89ee877
         self._client.disconnect()
         self._client.loop_stop()
 
@@ -198,7 +170,6 @@ class MqttReader():
             raise ConnectionError(f'Error - subscription failed, result={result[0]}')
         self._queue = SimpleQueue()
         self.timedout = False
-        self.eot = False
         self.firstmessage = True
 
     def _on_connect(self, client, userdata, mid, reasoncode, properties):
@@ -228,11 +199,8 @@ class MqttReader():
         try:
             msg = self._queue.get(timeout=timeout)
         except Empty:
-            raise TimeoutError('Timeout while waiting for MQTT message.')
+            return None
         payload, timestamp = remove_timestamp(msg.payload)
-        if timestamp < 0:
-            # End-of-transmission marker
-            raise EOFError('End of transmission received.')
         return MqttMessage(msg.topic, payload, timestamp)
 
     def close(self):

@@ -92,16 +92,16 @@ def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password
         try:
             msg = f.readmessage()
             if msg is None:
-                raise ConnectionError('No checkpoint data received.')
-            elif msg.timestamp < 0:
-                raise ConnectionError('No checkpoint data available for this simulation.')
-            data = zlib.decompress(msg.payload)
-            simulation = deserialize_simulation(data)
-            return simulation
+                print('Timeout while waiting for simulation')
+                return None
         except ConnectionError as e:
             print('Error retrieving simulation:', e, flush=True,
                   file=sys.stderr)
-
+            return None
+        data = zlib.decompress(msg.payload)
+        simulation = deserialize_simulation(data)
+        return simulation
+        
 
 class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT."""

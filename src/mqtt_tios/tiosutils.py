@@ -79,10 +79,6 @@ class TiosNCWriter():
     def write_frame(self):
         try:
             msg = self._reader.readmessage()
-        except EOFError:
-            print('End of transmission')
-            self.reader_online = False
-            return
         except TimeoutError:
             print('Timeout while waiting for message')
             self.reader_online = False
