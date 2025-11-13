@@ -18,22 +18,18 @@ class TiosXTCWriter():
         self._reader = MqttReader(broker_address, self.subscription,
                                   port=port, timeout=timeout,
                                   client_id="xtc_writer")
-        self.reader_online = True
+        self.timedout = False
         self.xtcfile = None
         self.framebuffer = None
         self.saved_frames = 0
 
     def write_frame(self):
-        try:
-            msg = self._reader.readmessage()
-        except EOFError:
-            print('End of transmission')
-            self.reader_online = False
+        msg = self._reader.readmessage()
+        if msg is None:
+            print('Timeout waiting for frame')
+            self.timedout = True
             return
-        except TimeoutError:
-            print('Timeout while waiting for message')
-            self.reader_online = False
-            return
+        
         self.framebuffer = np.frombuffer(
             zlib.decompress(msg.payload),
             dtype=np.float32).reshape((-1, 3))
@@ -44,9 +40,6 @@ class TiosXTCWriter():
         t = self.framebuffer[0, 0]
         self.saved_frames += 1
         self.xtcfile.write(xyz, time=t, step=self.saved_frames, box=box)
-
-    def reader_online(self):
-        return self.reader_online
 
     def close(self):
         self.xtcfile.close()
@@ -71,17 +64,17 @@ class TiosNCWriter():
         self._reader = MqttReader(broker_address, self.subscription,
                                   port=port, timeout=timeout,
                                   client_id="nc_writer")
-        self.reader_onlije = True
+        self.timedout = False
         self.ncfile = None
         self.framebuffer = None
         self.saved_frames = 0
 
     def write_frame(self):
-        try:
-            msg = self._reader.readmessage()
-        except TimeoutError:
+        
+        msg = self._reader.readmessage()
+        if msg is None:
             print('Timeout while waiting for message')
-            self.reader_online = False
+            self.timedout = True
             return
         value = msg.payload
         self.framebuffer = np.frombuffer(
@@ -97,9 +90,6 @@ class TiosNCWriter():
         self.ncfile.write(xyz, time=t,
                           cell_lengths=(a, b, c),
                           cell_angles=(alpha, beta, gamma))
-
-    def reader_online(self):
-        return self.reader_online
 
     def close(self):
         self.ncfile.close()
@@ -132,12 +122,12 @@ def get_simulations(broker_address, port=1883, timeout=10):
             simulations[sim_id]['is_running'] = False
 
         if msg.timestamp > simulations[sim_id]['last_update']:
-            simulations[sim_id]['last_update'] = msg.timestamp
+            simulations[sim_id]['last_update'] = abs(msg.timestamp)
         topic_type = msg.topic.split('/')[2]
         if topic_type == 'summary':
             simulations[sim_id]['summary'] = msg.payload.decode('utf-8')
-        elif topic_type == 'state':
-            simulations[sim_id]['is_running'] = True
+        elif topic_type == 'status':
+            simulations[sim_id]['is_running'] = topic_type == 'online'
         elif topic_type == 'checkpoint':
             simulations[sim_id]['has_checkpoint'] = True
         msg = reader.readmessage(timeout=1)

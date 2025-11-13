@@ -62,7 +62,7 @@ def tios_write_cli():
     with writer(mqtt_broker, sim_id, output_file,
                 timeout=timeout, port=port) as f:
         t = tqdm(unit=" frames", total=max_frames)
-        while not (f.timedout() or killer.kill_now):
+        while not (f.timedout or killer.kill_now):
             f.write_frame()
             t.update()
         t.close()

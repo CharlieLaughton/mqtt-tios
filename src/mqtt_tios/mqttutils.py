@@ -4,10 +4,20 @@ import string
 import random
 import time
 import struct
+import signal
 
 # Generate a random client ID
 alphabet = string.ascii_lowercase + string.digits
 
+class GracefulKiller:
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signum, frame):
+        self.kill_now = True
 
 def random_choice():
     return ''.join(random.choices(alphabet, k=6))
@@ -110,6 +120,20 @@ class MqttWriter():
         if self.verbose:
             print(f'wrote message to {topic}: {len(payload)} bytes')
 
+    def clear(self, topic):
+        """Clear any retained message.
+        Args:
+            topic (str): The topic to publish the message to. If None, uses default topic.
+        """
+        if topic is None:
+            topic = self._default_topic
+        
+        result = self._client.publish(topic, '', retain=True)
+        if result[0] != mqtt.MQTT_ERR_SUCCESS:
+            raise ConnectionError(f'Error - publish failed, result={result[0]}')
+        if self.verbose:
+            print(f'cleared {topic}')
+
     def close(self):
         """Close the MQTT connection."""
         if self._status_topic is not None:
@@ -171,6 +195,7 @@ class MqttReader():
         self._queue = SimpleQueue()
         self.timedout = False
         self.firstmessage = True
+        self.killer = GracefulKiller()
 
     def _on_connect(self, client, userdata, mid, reasoncode, properties):
         if self.verbose:
@@ -196,9 +221,22 @@ class MqttReader():
             timeout = None
             self.firstmessage = False
         self.timedout = False
+        t = 0
+        while True:
+            if not self._queue.empty():
+                break
+            time.sleep(1)
+            if self.killer.kill_now:
+                return None
+            t += 1
+            if timeout is not None and t >= timeout:
+                print('Timeout while waiting for message')
+                self.timedout = True
+                return None
         try:
-            msg = self._queue.get(timeout=timeout)
+            msg = self._queue.get(timeout=1)
         except Empty:
+            self.timedout = True
             return None
         payload, timestamp = remove_timestamp(msg.payload)
         return MqttMessage(msg.topic, payload, timestamp)
