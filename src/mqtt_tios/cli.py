@@ -90,38 +90,14 @@ def tios_ls_cli():
     if len(simulations) > 0:
         print("Available simulations:")
         sorted_sims = {k: v for k, v in sorted(simulations.items(),
-                                               key=lambda item: item[1]['last_update'], reverse=True)}
+                                               key=lambda item: item[1]['is_running'], reverse=True)}
 
         for simId, simData in sorted_sims.items():
             summary = simData['summary']
-            last_update = datetime.fromtimestamp(simData['last_update'])
-            delta = (now - last_update)
-            if delta.days > 0:
-                interval = f"{delta.days} day"
-                if delta.days > 1:
-                    interval += "s"
-            elif delta.seconds >= 3600:
-                hours = delta.seconds // 3600
-                interval = f"{hours} hour"
-                if hours > 1:
-                    interval += "s"
-            elif delta.seconds >= 60:
-                minutes = delta.seconds // 60
-                interval = f"{minutes} minute"
-                if minutes > 1:
-                    interval += "s"
-            else:
-                interval = f"{delta.seconds} second"
-                if delta.seconds > 1:
-                    interval += "s"
-            status = []
             if simData['is_running']:
-                status.append("running")
+                status = 'on line'
             else:
-                status.append("stopped")
-            if simData['has_checkpoint']:
-                status.append("checkpointed")
-            status_str = ", ".join(status)
-            print(f" - {simId}: {summary}: last updated {interval} ago, {status_str}")
+                status = 'off line'
+            print(f" - {simId}: {summary}: {status}")
     else:
         print("No simulations found.")

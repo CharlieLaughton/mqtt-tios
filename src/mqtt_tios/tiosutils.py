@@ -117,19 +117,14 @@ def get_simulations(broker_address, port=1883, timeout=10):
         if sim_id not in simulations:
             simulations[sim_id] = {}
             simulations[sim_id]['summary'] = None
-            simulations[sim_id]['last_update'] = 0
-            simulations[sim_id]['has_checkpoint'] = False
             simulations[sim_id]['is_running'] = False
 
-        if msg.timestamp > simulations[sim_id]['last_update']:
-            simulations[sim_id]['last_update'] = abs(msg.timestamp)
         topic_type = msg.topic.split('/')[2]
         if topic_type == 'summary':
             simulations[sim_id]['summary'] = msg.payload.decode('utf-8')
         elif topic_type == 'status':
-            simulations[sim_id]['is_running'] = topic_type == 'online'
-        elif topic_type == 'checkpoint':
-            simulations[sim_id]['has_checkpoint'] = True
+            status = msg.payload.decode('utf-8')
+            simulations[sim_id]['is_running'] = status == 'online'
         msg = reader.readmessage(timeout=1)
 
     return simulations

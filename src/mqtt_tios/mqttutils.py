@@ -27,7 +27,7 @@ def add_timestamp(payload):
     """Add a timestamp to the payload."""
     if not isinstance(payload, bytes):
         raise ValueError('Payload must be bytes')
-    return payload + struct.pack('f', time.time())
+    return payload + struct.pack('<f', time.time())
 
 
 def remove_timestamp(payload):
@@ -36,7 +36,7 @@ def remove_timestamp(payload):
         raise ValueError('Payload must be bytes with at least 4 bytes')
     data = payload[:-4]
     timestamp_bytes = payload[-4:]
-    timestamp = struct.unpack('f', timestamp_bytes)[0]
+    timestamp = struct.unpack('<f', timestamp_bytes)[0]
     return data, timestamp
 
 
@@ -90,7 +90,7 @@ class MqttWriter():
         self._client.username_pw_set(username=username, password=password)
         # Set last will message
         if self._status_topic is not None:
-            self._client.will_set(self._status_topic, payload='offline', qos=1, retain=True)
+            self._client.will_set(self._status_topic, payload=add_timestamp('offline'.encode('utf-8')), qos=1, retain=True)
 
         # Connect to the broker
         self._client.connect(self._broker_address, self._port, 60)
@@ -100,7 +100,7 @@ class MqttWriter():
         if reasoncode != 0:
             raise ConnectionError(f'Error - connection failed, reason code={reasoncode}')
         if self._status_topic is not None:
-            self._client.publish(self._status_topic, payload='online', qos=1, retain=True)
+            self._client.publish(self._status_topic, payload=add_timestamp('online'.encode('utf-8')), qos=1, retain=True)
         if self.verbose:
             print(f"Connected to MQTT broker at {self._broker_address}:{self._port}")
 
@@ -120,7 +120,7 @@ class MqttWriter():
         if self.verbose:
             print(f'wrote message to {topic}: {len(payload)} bytes')
 
-    def clear(self, topic):
+    def clear(self, topic=None):
         """Clear any retained message.
         Args:
             topic (str): The topic to publish the message to. If None, uses default topic.
@@ -137,7 +137,7 @@ class MqttWriter():
     def close(self):
         """Close the MQTT connection."""
         if self._status_topic is not None:
-            self._client.publish(self._status_topic, payload='offline', qos=1, retain=True)
+            self._client.publish(self._status_topic, payload=add_timestamp('offline'.encode('utf-8')), qos=1, retain=True)
         self._client.disconnect()
         self._client.loop_stop()
 
