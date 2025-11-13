@@ -3,19 +3,31 @@ from queue import SimpleQueue, Empty
 import string
 import random
 import time
-import json
 import struct
 
 # Generate a random client ID
 alphabet = string.ascii_lowercase + string.digits
+
+
 def random_choice():
     return ''.join(random.choices(alphabet, k=6))
+
 
 def add_timestamp(payload):
     """Add a timestamp to the payload."""
     if not isinstance(payload, bytes):
         raise ValueError('Payload must be bytes')
     return payload + struct.pack('f', time.time())
+
+
+def add_eot(payload):
+    """Add an end-of-transmission (EOT) marker to the payload.
+
+    This is a negative-values timestamp."""
+    if not isinstance(payload, bytes):
+        raise ValueError('Payload must be bytes')
+    return payload + struct.pack('f', -time.time())
+
 
 def remove_timestamp(payload):
     """Remove the timestamp from the payload."""
@@ -26,6 +38,7 @@ def remove_timestamp(payload):
     timestamp = struct.unpack('f', timestamp_bytes)[0]
     return data, timestamp
 
+
 class MqttMessage():
     """Class representing an MQTT message with topic and payload."""
     def __init__(self, topic, payload, timestamp):
@@ -35,10 +48,10 @@ class MqttMessage():
 
     def __repr__(self):
         return f'MqttMessage(topic={self.topic}, payload_length={len(self.payload)}, timestamp={self.timestamp})'
-    
+
     def __str__(self):
         return self.__repr__()
-    
+
 
 class MqttWriter():
     """Class for writing messages to an MQTT broker."""
@@ -71,6 +84,7 @@ class MqttWriter():
                                    client_id=client_id)
         self._client.on_connect = self._on_connect
         self._client.username_pw_set(username=username, password=password)
+        self._client.will_set(self._default_topic, payload=add_eot(b''), retain=True)
 
         # Connect to the broker
         self._client.connect(self._broker_address, self._port, 60)
@@ -88,7 +102,7 @@ class MqttWriter():
             retain (bool): If True, the message will be retained by the broker.
         """
         if topic is None:
-            topic = self._default_topic 
+            topic = self._default_topic
         pt = add_timestamp(payload)
         result = self._client.publish(topic, pt, retain=retain)
         if result[0] != mqtt.MQTT_ERR_SUCCESS:
@@ -96,8 +110,23 @@ class MqttWriter():
         if self.verbose:
             print(f'wrote message to {topic}: {len(payload)} bytes')
 
+    def writeeot(self, payload, topic=None):
+        """Write an end-of-transmission (EOT) message to the MQTT broker.
+        Args:
+            topic (str): The topic to publish the EOT message to. If None, uses default topic.
+        """
+        if topic is None:
+            topic = self._default_topic
+        pt = add_eot(payload)
+        result = self._client.publish(topic, pt, retain=True)
+        if result[0] != mqtt.MQTT_ERR_SUCCESS:
+            raise ConnectionError(f'Error - publish failed, result={result[0]}')
+        if self.verbose:
+            print(f'wrote EOT message to {topic}')
+
     def close(self):
         """Close the MQTT connection."""
+        self.writeeot(b'')
         self._client.disconnect()
         self._client.loop_stop()
 
@@ -141,7 +170,7 @@ class MqttReader():
             client_id += '-' + random_choice()
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                                    client_id=client_id)
+                                   client_id=client_id)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._client.username_pw_set(username=username, password=password),
@@ -154,6 +183,7 @@ class MqttReader():
             raise ConnectionError(f'Error - subscription failed, result={result[0]}')
         self._queue = SimpleQueue()
         self.timedout = False
+        self.eot = False
         self.firstmessage = True
 
     def _on_connect(self, client, userdata, mid, reasoncode, properties):
@@ -172,7 +202,7 @@ class MqttReader():
         Args:
             timeout (int): Timeout in seconds for reading the message.
         Returns:
-            msg 
+            msg
         """
         if timeout is None:
             timeout = self.timeout
@@ -183,9 +213,11 @@ class MqttReader():
         try:
             msg = self._queue.get(timeout=timeout)
         except Empty:
-            self.timedout = True
-            return None
+            raise TimeoutError('Timeout while waiting for MQTT message.')
         payload, timestamp = remove_timestamp(msg.payload)
+        if timestamp < 0:
+            # End-of-transmission marker
+            raise EOFError('End of transmission received.')
         return MqttMessage(msg.topic, payload, timestamp)
 
     def close(self):

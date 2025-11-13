@@ -10,7 +10,7 @@ import signal
 from datetime import datetime
 
 
-#. sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
+# sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
 
 
 class GracefulKiller:
@@ -86,12 +86,12 @@ def tios_ls_cli():
     from .tiosutils import get_simulations
     now = datetime.now()
     simulations = get_simulations(mqtt_broker, port=port,
-                                   timeout=args.timeout)
-    if len(simulations ) > 0:
+                                  timeout=args.timeout)
+    if len(simulations) > 0:
         print("Available simulations:")
-        sorted_sims = {k: v for k, v in sorted(simulations.items(), key=lambda item: item[1]['last_update'], reverse=True)}
-        
-        
+        sorted_sims = {k: v for k, v in sorted(simulations.items(),
+                                               key=lambda item: item[1]['last_update'], reverse=True)}
+
         for simId, simData in sorted_sims.items():
             summary = simData['summary']
             last_update = datetime.fromtimestamp(simData['last_update'])

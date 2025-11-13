@@ -1,4 +1,3 @@
-import time
 import zlib
 import json
 from io import StringIO
@@ -7,9 +6,9 @@ import numpy as np
 from .mqttutils import MqttReader, MqttWriter
 import sys
 
-from openmm import XmlSerializer, LangevinMiddleIntegrator
+from openmm import XmlSerializer
 from openmm.app import PDBFile, Simulation
-from openmm.unit import kelvin, picosecond
+from openmm.unit import picosecond
 
 sys.tracebacklimit = None  # suppress traceback for ConnectionError
 
@@ -63,7 +62,8 @@ def deserialize_simulation(simulation_data):
     f.seek(0)
     simulation.loadState(f)
     return simulation
-  
+
+
 def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password=None):
     """Retrieve an existing simulation.
     Parameters
@@ -93,13 +93,15 @@ def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password
             msg = f.readmessage()
             if msg is None:
                 raise ConnectionError('No checkpoint data received.')
+            elif msg.timestamp < 0:
+                raise ConnectionError('No checkpoint data available for this simulation.')
             data = zlib.decompress(msg.payload)
             simulation = deserialize_simulation(data)
             return simulation
         except ConnectionError as e:
             print('Error retrieving simulation:', e, flush=True,
-                    file=sys.stderr)
-    
+                  file=sys.stderr)
+
 
 class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT."""
@@ -131,7 +133,7 @@ class TiosMqttReporter():
         password : str, optional
             The password for MQTT authentication.
         """
-        
+
         self._reportInterval = reportInterval
         self._checkpointInterval = checkpointInterval
         self._summary = summary
@@ -148,23 +150,23 @@ class TiosMqttReporter():
                 raise ValueError(f'Simulation ID {simId} already exists.')
         else:
             self._new = True
-        
+
         self._framebuffer = None
         self._first_report = True
         self._report_writer = MqttWriter(brokerAddress,
-                                        f'tios/{simId}/state',
-                                        port=port,
-                                        username=username,
-                                        password=password,
-                                        client_id='report_writer')
+                                         f'tios/{simId}/state',
+                                         port=port,
+                                         username=username,
+                                         password=password,
+                                         client_id='report_writer')
         if checkpointInterval is not None:
             self._checkpoint_writer = MqttWriter(brokerAddress,
-                                                f'tios/{simId}/checkpoint',
-                                                port=port,
-                                                username=username,
-                                                password=password,
-                                                client_id='checkpoint_writer')
-        
+                                                 f'tios/{simId}/checkpoint',
+                                                 port=port,
+                                                 username=username,
+                                                 password=password,
+                                                 client_id='checkpoint_writer')
+
     def describeNextReport(self, simulation):
         """Get information about the next report this object will generate.
 
@@ -199,12 +201,12 @@ class TiosMqttReporter():
         if self._new:
             self.register_simulation(self._simId, simulation, summary=self._summary)
             self._new = False
-        
+
         if self._first_report:
             self.checkpoint_simulation(simulation)
             self._last_checkpoint_step = simulation.currentStep
             self._first_report = False
-        elif (self._checkpointInterval is not None and  
+        elif (self._checkpointInterval is not None and
               simulation.currentStep - self._last_checkpoint_step >= self._checkpointInterval):
             self.checkpoint_simulation(simulation)
             self._last_checkpoint_step = simulation.currentStep
@@ -225,7 +227,7 @@ class TiosMqttReporter():
         except ConnectionError as e:
             print('Error publishing simulation snapshot:', e, flush=True,
                   file=sys.stderr)
-            
+
     def close(self):
         """ Close the MQTT connection
 
@@ -262,7 +264,7 @@ class TiosMqttReporter():
                 return True
             except ConnectionError:
                 return False
-    
+
     def register_simulation(self, simId, simulation, summary=None):
         """Register a new simulation.
 
@@ -297,11 +299,10 @@ class TiosMqttReporter():
         simulation : OpenMM Simulation
             The OpenMM Simulation object to checkpoint.
         """
-        
+
         data = serialize_simulation(simulation)
         try:
             self._checkpoint_writer.writemessage(zlib.compress(data), retain=True)
         except ConnectionError as e:
             print('Error checkpointing simulation:', e, flush=True,
-                    file=sys.stderr)
-    
+                  file=sys.stderr)
