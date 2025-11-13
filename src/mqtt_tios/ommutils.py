@@ -156,6 +156,7 @@ class TiosMqttReporter():
                                         port=port,
                                         username=username,
                                         password=password,
+                                        status_topic=f'tios/{simId}/status',
                                         client_id='report_writer')
         if checkpointInterval is not None:
             self._checkpoint_writer = MqttWriter(brokerAddress,
