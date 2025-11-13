@@ -279,8 +279,6 @@ class TiosMqttReporter():
             An optional summary description of the simulation.
 
         """
-        if self.check_exists(simId):
-            raise ValueError(f'Simulation ID {simId} is already in use.')
         if summary is None:
             summary = f'OpenMM simulation with {simulation.context.getSystem().getNumParticles()} atoms.'
         with MqttWriter(self._brokerAddress,
