@@ -12,10 +12,11 @@ with the MQTT broker.
 from mqtt_tios import ommutils
 sim_id = '5fdr_A'
 # mqtt_broker = 'localhost'
-mqtt_broker = 'broker.hivemq.com'
-mqtt_port = 1883
+mqtt_broker = 'charlielaughton.com'
+# mqtt_port = 1883
+mqtt_port = 8080 
 save_int = 500
-client = ommutils.TiosMqttClient(mqtt_broker, port=mqtt_port)
+client = ommutils.TiosMqttClient(mqtt_broker, port=mqtt_port, username='tios_publisher', password='publisher_tios')
 simulation = client.retrieve_simulation(sim_id)
 print(f'Simulation {sim_id} retrieved from mqtt_tios broker {mqtt_broker}.')
 print(f'client simId = {client.simId}')

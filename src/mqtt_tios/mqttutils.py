@@ -59,6 +59,7 @@ class MqttWriter():
     def __init__(self, broker_address, default_topic,
                  port=1883, verbose=False,
                  username=None, password=None,
+                 status_topic=None,
                  client_id=None):
         """Initialize the MQTT writer.
 
@@ -69,12 +70,14 @@ class MqttWriter():
             verbose (bool): If True, print debug information.
             username (str): Username for MQTT authentication.
             password (str): Password for MQTT authentication.
+            status_topic (str): Topic for status messages.
             client_id (str): Client ID for MQTT connection, a random ID is appended.
         """
         self._broker_address = broker_address
         self._default_topic = default_topic
         self._port = port
         self.verbose = verbose
+        self._status_topic = status_topic
         if client_id is None:
             client_id = 'mqtt_writer-' + random_choice()
         else:
@@ -86,6 +89,9 @@ class MqttWriter():
         self._client.username_pw_set(username=username, password=password)
         self._client.will_set(self._default_topic, payload=add_eot(b''), retain=True)
 
+        if self._status_topic is not None:
+            self._client.will_set(self._status_topic, payload='offline', qos=1, retain=True)
+
         # Connect to the broker
         self._client.connect(self._broker_address, self._port, 60)
         self._client.loop_start()
@@ -93,6 +99,10 @@ class MqttWriter():
     def _on_connect(self, client, userdata, mid, reasoncode, properties):
         if reasoncode != 0:
             raise ConnectionError(f'Error - connection failed, reason code={reasoncode}')
+        if self._status_topic is not None:
+            self._client.publish(self._status_topic, payload='online', qos=1, retain=True)
+        if self.verbose:
+            print(f"Connected to MQTT broker at {self._broker_address}:{self._port}")
 
     def writemessage(self, payload, topic=None, retain=False):
         """Write a message to the MQTT broker.
@@ -126,7 +136,12 @@ class MqttWriter():
 
     def close(self):
         """Close the MQTT connection."""
+<<<<<<< HEAD
         self.writeeot(b'')
+=======
+        if self._status_topic is not None:
+            self._client.publish(self._status_topic, payload='offline', qos=1, retain=True)
+>>>>>>> 99460c1bdc0c4f0fa15e4dcb647f93ada89ee877
         self._client.disconnect()
         self._client.loop_stop()
 

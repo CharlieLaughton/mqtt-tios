@@ -33,8 +33,8 @@ print('Done.')
 from mqtt_tios import ommutils
 sim_id = '5fdr_A'
 # mqtt_broker = 'localhost'
-mqtt_broker = 'broker.hivemq.com'
-mqtt_port = 1883
+mqtt_broker = 'charlielaughton.com'
+mqtt_port = 8080
 report_interval = 500
 checkpoint_interval = 5000
 print(f'Mqtt-reporter will publish snapshots with id "{sim_id}" to broker "{mqtt_broker}" on port {mqtt_port}.')
@@ -43,6 +43,9 @@ mqtt_reporter = ommutils.TiosMqttReporter(
     sim_id,
     report_interval,
     checkpointInterval=checkpoint_interval,
+    username='tios_publisher',
+    password = 'publisher_tios',
+    port = mqtt_port,
     exists_ok=True)
 
 simulation.reporters.append(mqtt_reporter)
