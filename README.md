@@ -16,9 +16,11 @@ This is a complete rewrite of the original Tios code, with currently a very diff
   pip install .
   ```
 4. Set environment variables for your broker:
+   ```
   export TIOSBROKER=localhost # or wherever yur broker is
   export TIOSPORT=1883 # or whatever port it is using
-5. Add a tios-reporter to your OpenMM simulation, e.g.:
+  ```
+6. Add a tios-reporter to your OpenMM simulation, e.g.:
    ```
    ...
    from mqtt-tios import ommutils, clients
