@@ -4,18 +4,19 @@ import numpy as np
 from mdtraj.utils import box_vectors_to_lengths_and_angles
 from mdtraj.formats import NetCDFTrajectoryFile, XTCTrajectoryFile
 from .mqttutils import MqttReader
+from .config import config
 
 
 class TiosXTCWriter():
-    def __init__(self, broker_address, sim_id, xtcfilename, port=1883,
+    def __init__(self, sim_id, xtcfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
-        self.broker_address = broker_address
+        self.broker_address = mqtt_broker
         self.port = port
         self.subscription = f"tios/{sim_id}/state"
         self.xtcfilename = xtcfilename
 
-        self._reader = MqttReader(broker_address, self.subscription,
+        self._reader = MqttReader(self.broker_address, self.subscription,
                                   port=port, timeout=timeout,
                                   client_id="xtc_writer")
         self.timedout = False
@@ -53,15 +54,15 @@ class TiosXTCWriter():
 
 
 class TiosNCWriter():
-    def __init__(self, broker_address, sim_id, ncfilename, port=1883,
+    def __init__(self, sim_id, ncfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
-        self.broker_address = broker_address
+        self.broker_address = mqtt_broker
         self.port = port
         self.subscription = f"tios/{sim_id}/state"
         self.ncfilename = ncfilename
 
-        self._reader = MqttReader(broker_address, self.subscription,
+        self._reader = MqttReader(self.broker_address, self.subscription,
                                   port=port, timeout=timeout,
                                   client_id="nc_writer")
         self.timedout = False
@@ -102,7 +103,10 @@ class TiosNCWriter():
         self.close()
 
 
-def get_simulations(broker_address, port=1883, timeout=10):
+def get_simulations(broker_address=None, port=None, timeout=10):
+
+    broker_address = broker_address or config.broker
+    port = port or config.port
 
     simulations = {}
     subscription = "tios/#"

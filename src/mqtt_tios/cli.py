@@ -3,6 +3,7 @@
 
 from .tiosutils import TiosXTCWriter, TiosNCWriter
 from ._version import __version__
+from .config import config
 from tqdm import tqdm
 from argparse import ArgumentParser
 from pathlib import Path
@@ -27,7 +28,8 @@ class GracefulKiller:
 def tios_write_cli():
     parser = ArgumentParser(description="Write simulation data to"
                             " an XTC or NetCDF file using MQTT.")
-    parser.add_argument("mqtt_broker", type=str,
+    parser.add_argument("--broker", type=str,
+                        default=config.broker,
                         help="The address of the MQTT broker.")
     parser.add_argument("sim_id", type=str,
                         help="The unique identifier for the simulation.")
@@ -35,14 +37,14 @@ def tios_write_cli():
                         help="The output XTC/NC file path.")
     parser.add_argument("--timeout", type=int, default=60,
                         help="Timeout in seconds for waiting for new frames.")
-    parser.add_argument("--port", type=int, default=1883,
+    parser.add_argument("--port", type=int, default=config.port,
                         help="The port number of the MQTT broker.")
     parser.add_argument("--max_frames", type=int, default=None,
                         help="Maximum number of frames to write.")
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args()
 
-    mqtt_broker = args.mqtt_broker
+    mqtt_broker = args.broker
     sim_id = args.sim_id
     output_file = args.output_file
     timeout = args.timeout
@@ -59,7 +61,8 @@ def tios_write_cli():
 
     killer = GracefulKiller()
 
-    with writer(mqtt_broker, sim_id, output_file,
+    with writer(sim_id, output_file,
+                mqtt_broker=mqtt_broker,
                 timeout=timeout, port=port) as f:
         t = tqdm(unit=" frames", total=max_frames)
         while not (f.timedout or killer.kill_now):
@@ -71,16 +74,17 @@ def tios_write_cli():
 def tios_ls_cli():
     parser = ArgumentParser(description="List available simulations"
                             " from an MQTT broker.")
-    parser.add_argument("mqtt_broker", type=str,
+    parser.add_argument("--broker", type=str,
+                        default=config.broker,
                         help="The address of the MQTT broker.")
-    parser.add_argument("--port", type=int, default=1883,
+    parser.add_argument("--port", type=int, default=config.port,
                         help="The port number of the MQTT broker.")
     parser.add_argument("--timeout", type=int, default=5,
                         help="Timeout in seconds for waiting for simulations.")
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args()
 
-    mqtt_broker = args.mqtt_broker
+    mqtt_broker = args.broker
     port = args.port
 
     from .tiosutils import get_simulations

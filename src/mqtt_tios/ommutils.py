@@ -4,6 +4,7 @@ from io import StringIO
 
 import numpy as np
 from .mqttutils import MqttReader, MqttWriter
+from .config import config
 import sys
 
 from openmm import XmlSerializer
@@ -12,6 +13,36 @@ from openmm.unit import picosecond
 
 sys.tracebacklimit = None  # suppress traceback for ConnectionError
 
+def check_exists(simId, brokerAddress=None,
+                 port=None):
+    """Check if a simulation with the given ID exists.
+
+    Parameters
+    ----------
+    simId : str
+        A unique identifier for the simulation.
+
+    Returns
+    -------
+    bool
+        True if the simulation exists, False otherwise.
+
+    """
+    brokerAddress = brokerAddress or config.broker
+    port = port or config.port
+    
+    with MqttReader(brokerAddress,
+                    f'tios/{simId}/checkpoint',
+                    port=port,
+                    patient=False, timeout=2,
+                    client_id='checker') as f:
+        try:
+            msg = f.readmessage(timeout=2)
+            if msg is None:
+                return False
+            return True
+        except ConnectionError:
+            return False
 
 def serialize_simulation(simulation):
     """Serialize an OpenMM simulation.
@@ -64,7 +95,7 @@ def deserialize_simulation(simulation_data):
     return simulation
 
 
-def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password=None):
+def retrieve_simulation(simId, brokerAddress=None, port=None, username=None, password=None):
     """Retrieve an existing simulation.
     Parameters
     ----------
@@ -83,6 +114,14 @@ def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password
     simulation : OpenMM Simulation
         The OpenMM Simulation object for the specified simulation ID.
     """
+    brokerAddress = brokerAddress or config.broker
+    port = port or config.port
+    username = username or config.username
+    password = password or config.password
+
+    if not check_exists(simId):
+        raise ValueError(f'Error: {simId} - no such simulation')
+    
     with MqttReader(brokerAddress,
                     f'tios/{simId}/checkpoint',
                     port=port,
@@ -105,10 +144,11 @@ def retrieve_simulation(brokerAddress, simId, port=1883, username=None, password
 
 class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT."""
-    def __init__(self, brokerAddress, simId, reportInterval,
+    def __init__(self, simId, reportInterval,
+                 brokerAddress=None, 
                  checkpointInterval=None,
                  summary=None,
-                 enforcePeriodicBox=None, port=1883,
+                 enforcePeriodicBox=None, port=None,
                  username=None, password=None,
                  exists_ok=False):
         """Initialize the MQTT reporter.
@@ -133,6 +173,10 @@ class TiosMqttReporter():
         password : str, optional
             The password for MQTT authentication.
         """
+        brokerAddress = brokerAddress or config.broker
+        port = port or config.port
+        username = username or config.username
+        password = password or config.password
 
         self._reportInterval = reportInterval
         self._checkpointInterval = checkpointInterval
@@ -144,7 +188,7 @@ class TiosMqttReporter():
         self._username = username
         self._password = password
 
-        if self.check_exists(simId):
+        if check_exists(simId):
             self._new = False
             if not exists_ok:
                 raise ValueError(f'Simulation ID {simId} already exists.')
@@ -236,35 +280,6 @@ class TiosMqttReporter():
 
         """
         self._report_writer.close()
-
-    def check_exists(self, simId):
-        """Check if a simulation with the given ID exists.
-
-        Parameters
-        ----------
-        simId : str
-            A unique identifier for the simulation.
-
-        Returns
-        -------
-        bool
-            True if the simulation exists, False otherwise.
-
-        """
-        with MqttReader(self._brokerAddress,
-                        f'tios/{simId}/#',
-                        port=self._port,
-                        username=self._username,
-                        password=self._password,
-                        patient=False, timeout=2,
-                        client_id='checker') as f:
-            try:
-                msg = f.readmessage()
-                if msg is None:
-                    return False
-                return True
-            except ConnectionError:
-                return False
 
     def register_simulation(self, simId, simulation, summary=None):
         """Register a new simulation.

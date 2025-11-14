@@ -10,24 +10,16 @@ with the MQTT broker.
 """
 
 from mqtt_tios import ommutils
-sim_id = '5fdr_Z'
-# mqtt_broker = 'localhost'
-mqtt_broker = 'charlielaughton.com'
-# mqtt_port = 1883
-mqtt_port = 8080 
+sim_id = '5fdr_A'
 report_interval = 500
 checkpoint_interval = 5000
 mqtt_reporter = ommutils.TiosMqttReporter(
-    mqtt_broker,
     sim_id,
     report_interval,
     checkpointInterval=checkpoint_interval,
-    username='tios_publisher',
-    password = 'publisher_tios',
-    port = mqtt_port,
     exists_ok=True)
-simulation = ommutils.retrieve_simulation(mqtt_broker, sim_id, port=mqtt_port)
-print(f'Simulation {sim_id} retrieved from mqtt_tios broker {mqtt_broker}.')
+simulation = ommutils.retrieve_simulation(sim_id)
+print(f'Simulation {sim_id} retrieved.')
 
 simulation.reporters.append(mqtt_reporter)
 print('Mqtt-reporter added to simulation.')
