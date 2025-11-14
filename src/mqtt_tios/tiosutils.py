@@ -1,38 +1,75 @@
+""" tiosutils.py: lower-level routines for command-line tools """
 from time import sleep
 import zlib
 import numpy as np
 from mdtraj.utils import box_vectors_to_lengths_and_angles
 from mdtraj.formats import NetCDFTrajectoryFile, XTCTrajectoryFile
-from .mqttutils import MqttReader
+from .clients import TiosSubscriber, TiosMonitor
 from .config import config
+import signal
 
+EOT = 'EOT'.encode('utf-8')
+
+class GracefulKiller:
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signum, frame):
+        self.kill_now = True
+
+def interruptable_get(queue, timeout=None):
+    """ A get that can be interrupted"""
+    killer = GracefulKiller()
+    time_left = timeout or 1
+    while time_left > 0 and queue.qsize() == 0 and not killer.kill_now:
+        sleep(1)
+        if timeout:
+            time_left -= 1
+    if queue.empty():
+        return None
+    else:
+        return queue.get()
 
 class TiosXTCWriter():
     def __init__(self, sim_id, xtcfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
-        self.broker_address = mqtt_broker
-        self.port = port
-        self.subscription = f"tios/{sim_id}/state"
+        self.broker_address = mqtt_broker or config.broker
+        self.port = port or config.port
         self.xtcfilename = xtcfilename
+        self.timeout = timeout
 
-        self._reader = MqttReader(self.broker_address, self.subscription,
-                                  port=port, timeout=timeout,
-                                  client_id="xtc_writer")
+        self._client = TiosSubscriber(sim_id,
+                                      broker_address=self.broker_address,
+                                      port=port)
         self.timedout = False
         self.xtcfile = None
         self.framebuffer = None
         self.saved_frames = 0
 
     def write_frame(self):
-        msg = self._reader.readmessage()
-        if msg is None:
+        
+        zdata = interruptable_get(self._client.states, timeout=self.timeout)
+        if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
             return
         
+        if zdata == EOT:
+            print('End of transmission')
+            self.timedout = True
+            return
+        
+        try:
+            data = zlib.decompress(zdata)
+        except:
+            print(f'Error decompressing {zdata}')
+            raise
         self.framebuffer = np.frombuffer(
-            zlib.decompress(msg.payload),
+            data,
             dtype=np.float32).reshape((-1, 3))
         if self.xtcfile is None:
             self.xtcfile = XTCTrajectoryFile(self.xtcfilename, 'w')
@@ -44,7 +81,7 @@ class TiosXTCWriter():
 
     def close(self):
         self.xtcfile.close()
-        self._reader.close()
+        self._client.close()
 
     def __enter__(self):
         return self
@@ -57,14 +94,14 @@ class TiosNCWriter():
     def __init__(self, sim_id, ncfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
-        self.broker_address = mqtt_broker
-        self.port = port
-        self.subscription = f"tios/{sim_id}/state"
+        self.broker_address = mqtt_broker or config.broker
+        self.port = port or config.port
         self.ncfilename = ncfilename
+        self.timeout = timeout
 
-        self._reader = MqttReader(self.broker_address, self.subscription,
-                                  port=port, timeout=timeout,
-                                  client_id="nc_writer")
+        self._client = TiosSubscriber(sim_id,
+                                      broker_address=self.broker_address,
+                                      port=port)
         self.timedout = False
         self.ncfile = None
         self.framebuffer = None
@@ -72,14 +109,23 @@ class TiosNCWriter():
 
     def write_frame(self):
         
-        msg = self._reader.readmessage()
-        if msg is None:
-            print('Timeout while waiting for message')
+        zdata = interruptable_get(self._client.states, timeout=self.timeout)
+        if zdata is None:
+            print('Timeout waiting for frame')
             self.timedout = True
             return
-        value = msg.payload
+
+        if zdata == EOT:
+            print('End of transmission')
+            self.timedout = True
+            return
+        try:
+            data = zlib.decompress(zdata)
+        except:
+            print('Error decompressing {zdata}')
+            raise
         self.framebuffer = np.frombuffer(
-            zlib.decompress(value),
+            data,
             dtype=np.float32).reshape((-1, 3))
         if self.ncfile is None:
             self.ncfile = NetCDFTrajectoryFile(self.ncfilename, 'w')
@@ -94,7 +140,7 @@ class TiosNCWriter():
 
     def close(self):
         self.ncfile.close()
-        self._reader.close()
+        self._client.close()
 
     def __enter__(self):
         return self
@@ -108,27 +154,15 @@ def get_simulations(broker_address=None, port=None, timeout=10):
     broker_address = broker_address or config.broker
     port = port or config.port
 
+    client = TiosMonitor(broker_address=broker_address, port=port)
+    sleep(timeout)
     simulations = {}
-    subscription = "tios/#"
-    with MqttReader(broker_address, subscription, port=port,
-                    timeout=timeout, patient=False,
-                    client_id='tios_ls') as reader:
-        sleep(timeout)
-
-    msg = reader.readmessage(timeout=1)
-    while msg is not None:
-        sim_id = msg.topic.split('/')[1]
-        if sim_id not in simulations:
-            simulations[sim_id] = {}
-            simulations[sim_id]['summary'] = None
-            simulations[sim_id]['is_running'] = False
-
-        topic_type = msg.topic.split('/')[2]
-        if topic_type == 'summary':
-            simulations[sim_id]['summary'] = msg.payload.decode('utf-8')
-        elif topic_type == 'status':
-            status = msg.payload.decode('utf-8')
-            simulations[sim_id]['is_running'] = status == 'online'
-        msg = reader.readmessage(timeout=1)
-
+    for k in client.status:
+        simulations[k] = {'status': client.status[k].decode(), 'summary': '(not available)'}
+    for k in client.summary:
+        if not k in simulations:
+            simulations[k] = {'status': '(unknown)', 'summary': client.summary[k].decode()}
+        else:
+            simulations[k]['summary'] = client.summary[k].decode()
+    
     return simulations

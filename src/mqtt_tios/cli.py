@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+""" cli.py: command line tools: tios_ls and tios_write """
 
 from .tiosutils import TiosXTCWriter, TiosNCWriter
 from ._version import __version__
@@ -8,7 +7,6 @@ from tqdm import tqdm
 from argparse import ArgumentParser
 from pathlib import Path
 import signal
-from datetime import datetime
 
 
 # sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
@@ -88,20 +86,15 @@ def tios_ls_cli():
     port = args.port
 
     from .tiosutils import get_simulations
-    now = datetime.now()
+    
     simulations = get_simulations(mqtt_broker, port=port,
                                   timeout=args.timeout)
     if len(simulations) > 0:
         print("Available simulations:")
         sorted_sims = {k: v for k, v in sorted(simulations.items(),
-                                               key=lambda item: item[1]['is_running'], reverse=True)}
+                                               key=lambda item: item[1]['status'], reverse=True)}
 
         for simId, simData in sorted_sims.items():
-            summary = simData['summary']
-            if simData['is_running']:
-                status = 'on line'
-            else:
-                status = 'off line'
-            print(f" - {simId}: {summary}: {status}")
+            print(f" - {simId}: {simData['summary']}: {simData['status']}")
     else:
         print("No simulations found.")
