@@ -38,7 +38,7 @@ dependencies = [
     "tqdm"
 ]
 [project.scripts]
-tios_write = "mqtt_tios.cli:tios_write_cli"
+tios_collect = "mqtt_tios.cli:tios_collect_cli"
 tios_ls = "mqtt_tios.cli:tios_ls_cli"
 
 [tool.hatch.metadata.hooks.custom]

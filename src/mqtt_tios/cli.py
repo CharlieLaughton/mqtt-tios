@@ -23,8 +23,8 @@ class GracefulKiller:
         self.kill_now = True
 
 
-def tios_write_cli():
-    parser = ArgumentParser(description="Write simulation data to"
+def tios_collect_cli():
+    parser = ArgumentParser(description="Save simulation data to"
                             " an XTC or NetCDF file using MQTT.")
     parser.add_argument("--broker", type=str,
                         default=config.broker,
