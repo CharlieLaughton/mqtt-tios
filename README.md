@@ -16,11 +16,11 @@ This is a complete rewrite of the original Tios code, with currently a very diff
   pip install .
   ```
 4. Set environment variables for your broker:
-   ```
+```
   export TIOSBROKER=localhost # or wherever yur broker is
   export TIOSPORT=1883 # or whatever port it is using
-  ```
-6. Add a tios-reporter to your OpenMM simulation, e.g.:
+```
+5. Add a tios-reporter to your OpenMM simulation, e.g.:
    ```
    ...
    from mqtt-tios import ommutils, clients
@@ -35,14 +35,14 @@ This is a complete rewrite of the original Tios code, with currently a very diff
    simulation.reporters.append(tios_reporter)
    ...
    ```
-8. Once your simulation is running, it will publish snaphots to the broker.
-9. From some other terminal window or computer with mqtt-tios installed and the environment variables set, connect to the running simulation and save published snapshots to a trajectory file:
+6. Once your simulation is running, it will publish snaphots to the broker.
+7. From some other terminal window or computer with mqtt-tios installed and the environment variables set, connect to the running simulation and save published snapshots to a trajectory file:
   ```  
   tios_collect test_simulation test_sim.nc
   49 frames [00:52,  1.05s/ frames]
   ```
-11. Hit `Ctrl-C` to quit collecting when you have enough. Frames can be saved in GROMACS .xtc or AMBER .nc format.
-12. If the simulation finishes, the collector will stall but not quit. If the simulation is restarted, collection will restart.
+8. Hit `Ctrl-C` to quit collecting when you have enough. Frames can be saved in GROMACS .xtc or AMBER .nc format.
+9. If the simulation finishes, the collector will stall but not quit. If the simulation is restarted, collection will restart.
 
 ## Examples
 See `test_sim.py` and `restart_sim.py` in the `/tests` folder for inspiration.
