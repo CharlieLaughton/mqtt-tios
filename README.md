@@ -11,7 +11,7 @@ This is a complete rewrite of the original Tios code, with currently a very diff
 1. Identify an mqtt broker you can make use of: there are free ones out there that you can use for testing; installing a local [mosquitto broker](https://mosquitto.org/download/) is easy too.
 2. Clone/download this repo, `cd` into it and then install the `mqtt-tios` Python package:
 ```
-  git clone
+  git clone git@github.com:CharlieLaughton/mqtt-tios.git
   cd mqtt-tios
   pip install .
   ```
