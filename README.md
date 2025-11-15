@@ -6,7 +6,12 @@ MQTT-Tios is a version of [Tios](https://bitbucket.org/claughton/tios/wiki/Overv
 This is a complete rewrite of the original Tios code, with currently a very different user interface. The focus is on simulations using [OpenMM](https://openmm.org).
 
 
-## Thumbnail sketch
+MQTT-Tios provides:
+
+1. A `Reporter` class for OpenMM simulations that, rather than saving snapshots of the simulation to a file, publishes them to the internet.
+2. Two command-line utilities: `tios_ls` to list streaming simulations currently running anywhere; and `tios_collect` to tap into a stream and collect snapshots as a conventional trajectory file.
+
+## How to use
 
 1. Identify an mqtt broker you can make use of: there are free ones out there that you can use for testing; installing a local [mosquitto broker](https://mosquitto.org/download/) is easy too.
 2. Clone/download this repo, `cd` into it and then install the `mqtt-tios` Python package:
@@ -36,9 +41,14 @@ This is a complete rewrite of the original Tios code, with currently a very diff
    ...
    ```
 6. Once your simulation is running, it will publish snaphots to the broker.
-7. From some other terminal window or computer with mqtt-tios installed and the environment variables set, connect to the running simulation and save published snapshots to a trajectory file:
-  ```  
-  tios_collect test_simulation test_sim.nc
+7. From some other terminal window or computer with mqtt-tios installed and the environment variables set, use `tios_ls` to check the simulations available, then connect to the running simulation and save published snapshots to a trajectory file:
+  ```
+  % tios_ls
+  Available simulations:
+   - test_simulation: OpenMM simulation with 20962 atoms.: online
+   - other_simulation: OpenMM simulation with 16545 atoms: offline
+
+  % tios_collect test_simulation test_sim.nc
   49 frames [00:52,  1.05s/ frames]
   ```
 8. Hit `Ctrl-C` to quit collecting when you have enough. Frames can be saved in GROMACS .xtc or AMBER .nc format.
