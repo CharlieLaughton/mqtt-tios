@@ -1,6 +1,6 @@
 # MQTT-Tios
 
-MQTT-Tios is a version of [Tios](https://bitbucket.org/claughton/tios/wiki/Overview) that communicates using the indusstry-standard
+MQTT-Tios is a version of [Tios](https://bitbucket.org/claughton/tios/wiki/Overview) that communicates using the industry-standard
 [MQTT protocol](https://mqtt.org) for IoT devices.
 
 This is a complete rewrite of the original Tios code, with currently a very different user interface. The focus is on simulations using [OpenMM](https://openmm.org).
@@ -41,7 +41,8 @@ MQTT-Tios provides:
    ...
    ```
 6. Once your simulation is running, it will publish snaphots to the broker.
-7. From some other terminal window or computer with mqtt-tios installed and the environment variables set, use `tios_ls` to check the simulations available, then connect to the running simulation and save published snapshots to a trajectory file:
+7. It also saves checkpoints of the whole simulation state at intervals, this permits simulations to be restarted seamlessly, even on different resoursec from the ones they were originally running on.
+8. From some other terminal window or computer with mqtt-tios installed and the environment variables set, use `tios_ls` to check the simulations available, then connect to the running simulation and save published snapshots to a trajectory file:
   ```
   % tios_ls
   Available simulations:
