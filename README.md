@@ -41,7 +41,7 @@ MQTT-Tios provides:
    ...
    ```
 6. Once your simulation is running, it will publish snaphots to the broker.
-7. It also saves checkpoints of the whole simulation state at intervals, this permits simulations to be restarted seamlessly, even on different resoursec from the ones they were originally running on.
+7. It also saves checkpoints of the whole simulation state at intervals, this permits simulations to be restarted seamlessly, even on different resources from the ones they were originally running on.
 8. From some other terminal window or computer with mqtt-tios installed and the environment variables set, use `tios_ls` to check the simulations available, then connect to the running simulation and save published snapshots to a trajectory file:
   ```
   % tios_ls
