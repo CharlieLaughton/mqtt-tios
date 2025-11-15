@@ -33,7 +33,7 @@ MQTT-Tios provides:
    tios_client = clients.TiosPublisher(simId)
    reportInterval = 500
    tios_reporter = ommutils.TiosMqttReporter(
-        client,
+        tios_client,
         reportInterval,
         checkpointInterval=5000,
         exists_ok=True)
