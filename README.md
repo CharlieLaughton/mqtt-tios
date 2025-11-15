@@ -57,5 +57,8 @@ MQTT-Tios provides:
 
 ## Examples
 See `test_sim.py` and `restart_sim.py` in the `/tests` folder for inspiration.
+
+## Considerations
+Anyone who can access your mqtt broker can see and collect data from your simulations. Mqtt-tios supports mqtt's username/password authentication and access control mechanisms so if you have control over your broker you can limit write access to chosen users, but it does not currently support SSL/TLS security. 
    
 
