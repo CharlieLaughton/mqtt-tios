@@ -63,8 +63,12 @@ def tios_collect_cli():
                 mqtt_broker=mqtt_broker,
                 timeout=timeout, port=port) as f:
         t = tqdm(unit=" frames", total=max_frames)
+        n_frames = 0
         while not (f.timedout or killer.kill_now):
             f.write_frame()
+            n_frames += 1
+            if max_frames and n_frames >= max_frames:
+                killer.kill_now = True
             t.update()
         t.close()
 
