@@ -55,8 +55,8 @@ class TiosSimDict():
     '''
     def __init__(self,
                  simIds=None,
-                 broker_address='localhost',
-                 port=1883,
+                 broker_address=None,
+                 port=None,
                  username=None,
                  password=None,
                  verbose=False):
@@ -82,6 +82,8 @@ class TiosSimDict():
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
+        username = username or config.username
+        password = password or config.password
         self._client.username_pw_set(username=username, password=password)
         
         self._status = MyDict(self._client, 'status', {})
@@ -171,15 +173,15 @@ class TiosSim():
     '''
     def __init__(self,
                  simId,
-                 broker_address='localhost',
-                 port=1883,
+                 broker_address=None,
+                 port=None,
                  username=None,
                  password=None,
                  verbose=False):
         
         self.simId = simId
-        self.broker_address = broker_address
-        self.port = port
+        self.broker_address = broker_address or config.broker
+        self.port = port or config.port
         self.verbose = verbose
 
         self.topics = [(f'tios/{simId}/status', 2),
@@ -192,6 +194,8 @@ class TiosSim():
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
+        username = username or config.username
+        password = password or config.password
         self._client.username_pw_set(username=username, password=password)
         
         self._status = None
