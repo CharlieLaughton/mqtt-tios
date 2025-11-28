@@ -4,11 +4,12 @@ import zlib
 import numpy as np
 from mdtraj.utils import box_vectors_to_lengths_and_angles
 from mdtraj.formats import NetCDFTrajectoryFile, XTCTrajectoryFile
-from .clients import TiosSubscriber, TiosMonitor
+from .clients import TiosSim, TiosSimDict
 from .config import config
 import signal
 
 EOT = 'EOT'.encode('utf-8')
+
 
 class GracefulKiller:
     kill_now = False
@@ -19,6 +20,7 @@ class GracefulKiller:
 
     def exit_gracefully(self, signum, frame):
         self.kill_now = True
+
 
 def interruptable_get(queue, timeout=None):
     """ A get that can be interrupted"""
@@ -32,6 +34,7 @@ def interruptable_get(queue, timeout=None):
         return None
     else:
         return queue.get()
+    
 
 class TiosXTCWriter():
     def __init__(self, sim_id, xtcfilename, mqtt_broker=None, port=None,
@@ -42,9 +45,9 @@ class TiosXTCWriter():
         self.xtcfilename = xtcfilename
         self.timeout = timeout
 
-        self._client = TiosSubscriber(sim_id,
-                                      broker_address=self.broker_address,
-                                      port=port)
+        self._sim = TiosSim(sim_id,
+                            broker_address=self.broker_address,
+                            port=port)
         self.timedout = False
         self.xtcfile = None
         self.framebuffer = None
@@ -52,7 +55,7 @@ class TiosXTCWriter():
 
     def write_frame(self):
         
-        zdata = interruptable_get(self._client.states, timeout=self.timeout)
+        zdata = interruptable_get(self._sim.state, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
@@ -65,9 +68,9 @@ class TiosXTCWriter():
         
         try:
             data = zlib.decompress(zdata)
-        except:
+        except Exception as e:
             print(f'Error decompressing {zdata}')
-            raise
+            raise e
         self.framebuffer = np.frombuffer(
             data,
             dtype=np.float32).reshape((-1, 3))
@@ -99,9 +102,9 @@ class TiosNCWriter():
         self.ncfilename = ncfilename
         self.timeout = timeout
 
-        self._client = TiosSubscriber(sim_id,
-                                      broker_address=self.broker_address,
-                                      port=port)
+        self._sim = TiosSim(sim_id,
+                            broker_address=self.broker_address,
+                            port=port)
         self.timedout = False
         self.ncfile = None
         self.framebuffer = None
@@ -109,7 +112,7 @@ class TiosNCWriter():
 
     def write_frame(self):
         
-        zdata = interruptable_get(self._client.states, timeout=self.timeout)
+        zdata = interruptable_get(self._sim.state, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
@@ -121,9 +124,9 @@ class TiosNCWriter():
             return
         try:
             data = zlib.decompress(zdata)
-        except:
+        except Exception as e:
             print('Error decompressing {zdata}')
-            raise
+            raise e
         self.framebuffer = np.frombuffer(
             data,
             dtype=np.float32).reshape((-1, 3))
@@ -154,15 +157,17 @@ def get_simulations(broker_address=None, port=None, timeout=10):
     broker_address = broker_address or config.broker
     port = port or config.port
 
-    client = TiosMonitor(broker_address=broker_address, port=port)
+    simdict = TiosSimDict(broker_address=broker_address, port=port)
     sleep(timeout)
     simulations = {}
-    for k in client.status:
-        simulations[k] = {'status': client.status[k].decode(), 'summary': '(not available)'}
-    for k in client.summary:
-        if not k in simulations:
-            simulations[k] = {'status': '(unknown)', 'summary': client.summary[k].decode()}
+    for k in simdict.status:
+        simulations[k] = {'status': simdict.status[k].decode(),
+                          'summary': '(not available)'}
+    for k in simdict.summary:
+        if k not in simulations:
+            simulations[k] = {'status': '(unknown)',
+                              'summary': simdict.summary[k].decode()}
         else:
-            simulations[k]['summary'] = client.summary[k].decode()
+            simulations[k]['summary'] = simdict.summary[k].decode()
     
     return simulations
