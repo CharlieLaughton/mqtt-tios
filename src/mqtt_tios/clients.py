@@ -93,8 +93,8 @@ class TiosSimDict():
         
         # Connect to the broker
         if self.verbose:
-            print(f'Connecting to {broker_address}:{port}')
-        self._client.connect(broker_address, port, 60)
+            print(f'Connecting to {self.broker_address}:{self.port}')
+        self._client.connect(self.broker_address, self.port, 60)
         self._client.loop_start()
         
     def _on_connect(self, client, userdata, mid, reason_code, properties):
@@ -208,8 +208,8 @@ class TiosSim():
         
         # Connect to the broker
         if self.verbose:
-            print(f'Connecting to {broker_address}:{port}')
-        self._client.connect(broker_address, port, 60)
+            print(f'Connecting to {self.broker_address}:{self.port}')
+        self._client.connect(self.broker_address, self.port, 60)
         self._client.loop_start()
         
     def _on_connect(self, client, userdata, mid, reason_code, properties):
