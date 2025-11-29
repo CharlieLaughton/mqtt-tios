@@ -4,7 +4,7 @@ import json
 from io import StringIO
 
 import numpy as np
-from .clients import TiosSim
+from .clients import TiosPublisher
 import sys
 
 from openmm import XmlSerializer
@@ -12,7 +12,6 @@ from openmm.app import PDBFile, Simulation
 from openmm.unit import picosecond
 
 sys.tracebacklimit = None  # suppress traceback for ConnectionError
-
 
 def serialize_simulation(simulation):
     """Serialize an OpenMM simulation.
@@ -65,14 +64,14 @@ def deserialize_simulation(simulation_data):
     return simulation
 
 
-def retrieve_checkpoint(sim):
+def retrieve_checkpoint(client):
     """Retrieve a checkpoint of a simulation from the broker"""
-    return deserialize_simulation(sim.checkpoint)
+    return deserialize_simulation(client.checkpoint)
 
 
 class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT."""
-    def __init__(self, sim, reportInterval,
+    def __init__(self, client, reportInterval,
                  checkpointInterval=None,
                  summary=None,
                  enforcePeriodicBox=None,
@@ -80,8 +79,8 @@ class TiosMqttReporter():
         """Initialize the MQTT reporter.
         Parameters
         ----------
-        sim : TiosSim
-            Interface with the MQTT client
+        client : TiosPublisher
+            The MQTT client
         reportInterval : int
             The interval (in steps) at which to report simulation data.
         checkpointInterval : int, optional
@@ -93,21 +92,21 @@ class TiosMqttReporter():
         exists_ok : bool, optional
             If True, any existing data for this simulation will be overwritten
         """
-        if not isinstance(sim, TiosSim):
-            raise ValueError('Error: sim must be of type {TioSim}')
+        if not isinstance(client, TiosPublisher):
+            raise ValueError('Error: client must be a TiosPublisher')
         
         if checkpointInterval is not None and checkpointInterval % reportInterval != 0:
             raise ValueError('Error: checkpointInterval must be a multiple of reportInterval')
-        self._sim = sim
+        self._client = client
         self._reportInterval = reportInterval
         self._checkpointInterval = checkpointInterval
         self._summary = summary
         self._enforcePeriodicBox = enforcePeriodicBox
 
-        if self._sim.summary is not None:
+        if self._client.summary is not None:
             self._new = False
             if not exists_ok:
-                raise ValueError(f'Simulation ID {self._sim.simId} already exists.')
+                raise ValueError(f'Simulation ID {self._client.simId} already exists.')
         else:
             self._new = True
 
