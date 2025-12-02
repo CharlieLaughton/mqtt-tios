@@ -26,12 +26,13 @@ class TiosPublisher():
         self.broker_address = broker_address or config.broker
         self.port = port or config.port
         self.verbose = verbose
-        
+
         self._status_topic = f'tios/{simId}/status'
         self._state_topic = f'tios/{simId}/state'
         self._summary_topic = f'tios/{simId}/summary'
         self._checkpoint_topic = f'tios/{simId}/checkpoint'
-        
+        self._poke_topic = f'tios/{simId}/poke'
+
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                   client_id='tios_publisher' + random_id())
         self._client.on_connect = self._on_connect
@@ -46,7 +47,8 @@ class TiosPublisher():
         self._summary = None
         self._checkpoint = None
         self._state = None
-        
+        self._poketime = None
+
         # Connect to the broker
         try:
             self._client.connect(self.broker_address, self.port, 60)
@@ -122,9 +124,7 @@ class TiosPublisher():
             raise ConnectionError(f'Error - connection failed, reason code={reason_code}')
         
         self.status = ONLINE
-        self._client.subscribe([(self._status_topic, 2),
-                                (self._summary_topic, 2),
-                                (self._checkpoint_topic, 2)])
+        self._client.subscribe(self._poke_topic)
         if self.verbose:
             print(f"Connected to MQTT broker at {self.broker_address}:{self.port}")
 
@@ -139,12 +139,10 @@ class TiosPublisher():
         if self.verbose:
             print(f"Received message on topic '{msg.topic}': {len(msg.payload)} bytes")
         tag = msg.topic.split('/')[2]
-        if tag == 'status':
-            self._status = msg.payload
-        elif tag == 'summary':
-            self._summary = msg.payload
-        elif tag == 'checkpoint':
-            self._checkpoint = msg.payload
+        if tag == 'poke':
+            self._poketime = float(msg.payload.decode('utf-8'))
+            if self.verbose:
+                print('Poke received')
 
     def close(self):
         """Close the MQTT connection."""
@@ -155,6 +153,7 @@ class TiosPublisher():
         self._client.loop_stop()
         if self.verbose:
             print('Client closed')
+
 
 class TiosSubscriber():
     def __init__(self,
@@ -173,6 +172,7 @@ class TiosSubscriber():
         self._state_topic = f'tios/{simId}/state'
         self._summary_topic = f'tios/{simId}/summary'
         self._checkpoint_topic = f'tios/{simId}/checkpoint'
+        self._poke_topic = f'tios/{simId}/poke'
         
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                   client_id='tios_subscriber' + random_id())
@@ -223,6 +223,15 @@ class TiosSubscriber():
         elif tag == 'state':
             self.state = msg.payload
             self.states.put(self.state)
+
+    def poke(self):
+        timestamp = str(time.time()).encode('utf-8')
+        self._client.publish(self._poke_topic,
+                             payload=timestamp,
+                             qos=1, retain=False)
+        if self.verbose:
+            print('Poke sent')
+        return timestamp
 
     def close(self):
         """Close the MQTT connection."""

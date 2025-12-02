@@ -64,7 +64,11 @@ def tios_collect_cli():
                 timeout=timeout, port=port) as f:
         t = tqdm(unit=" frames", total=max_frames)
         n_frames = 0
+        lastpoke = float(f.poke())  # Initial poke to start the simulation
         while not (f.timedout or killer.kill_now):
+            now = float(f.poke())
+            if now - lastpoke > timeout / 2:
+                lastpoke = float(f.poke())  # Send poke to keep simulation alive
             f.write_frame()
             n_frames += 1
             if max_frames and n_frames >= max_frames:
@@ -90,7 +94,7 @@ def tios_ls_cli():
     port = args.port
 
     from .tiosutils import get_simulations
-    
+
     simulations = get_simulations(mqtt_broker, port=port,
                                   timeout=args.timeout)
     if len(simulations) > 0:
