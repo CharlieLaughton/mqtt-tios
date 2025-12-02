@@ -6,32 +6,24 @@ from mdtraj.utils import box_vectors_to_lengths_and_angles
 from mdtraj.formats import NetCDFTrajectoryFile, XTCTrajectoryFile
 from .clients import TiosSubscriber, TiosMonitor
 from .config import config
-import signal
+from .control import killer
 
 EOT = 'EOT'.encode('utf-8')
 
-class GracefulKiller:
-    kill_now = False
 
-    def __init__(self):
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-    def exit_gracefully(self, signum, frame):
-        self.kill_now = True
-
-def interruptable_get(queue, timeout=None):
+def interruptable_get(client, timeout=None):
     """ A get that can be interrupted"""
-    killer = GracefulKiller()
     time_left = timeout or 1
-    while time_left > 0 and queue.qsize() == 0 and not killer.kill_now:
+    while time_left > 0 and client.states.qsize() == 0 and not killer.kill_now:
         sleep(1)
+        client.poke()
         if timeout:
             time_left -= 1
-    if queue.empty():
+    if client.states.empty():
         return None
     else:
-        return queue.get()
+        return client.states.get()
+
 
 class TiosXTCWriter():
     def __init__(self, sim_id, xtcfilename, mqtt_broker=None, port=None,
@@ -51,18 +43,18 @@ class TiosXTCWriter():
         self.saved_frames = 0
 
     def write_frame(self):
-        
-        zdata = interruptable_get(self._client.states, timeout=self.timeout)
+
+        zdata = interruptable_get(self._client, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
             return
-        
+
         if zdata == EOT:
             print('End of transmission')
             self.timedout = True
             return
-        
+
         try:
             data = zlib.decompress(zdata)
         except:
@@ -109,7 +101,7 @@ class TiosNCWriter():
 
     def write_frame(self):
         
-        zdata = interruptable_get(self._client.states, timeout=self.timeout)
+        zdata = interruptable_get(self._client, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True

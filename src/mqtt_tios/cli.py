@@ -6,22 +6,10 @@ from .config import config
 from tqdm import tqdm
 from argparse import ArgumentParser
 from pathlib import Path
-import signal
+from .control import killer
 
 
 # sys.tracebacklimit = 0  # Suppress traceback unless in debug mode
-
-
-class GracefulKiller:
-    kill_now = False
-
-    def __init__(self):
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-    def exit_gracefully(self, signum, frame):
-        self.kill_now = True
-
 
 def tios_collect_cli():
     parser = ArgumentParser(description="Save simulation data to"
@@ -57,18 +45,17 @@ def tios_collect_cli():
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use .xtc or .nc")
 
-    killer = GracefulKiller()
 
     with writer(sim_id, output_file,
                 mqtt_broker=mqtt_broker,
                 timeout=timeout, port=port) as f:
         t = tqdm(unit=" frames", total=max_frames)
         n_frames = 0
-        lastpoke = float(f.poke())  # Initial poke to start the simulation
+        lastpoke = float(f._client.poke())  # Initial poke to start the simulation
         while not (f.timedout or killer.kill_now):
-            now = float(f.poke())
+            now = float(f._client.poke())
             if now - lastpoke > timeout / 2:
-                lastpoke = float(f.poke())  # Send poke to keep simulation alive
+                lastpoke = float(f._client.poke())  # Send poke to keep simulation alive
             f.write_frame()
             n_frames += 1
             if max_frames and n_frames >= max_frames:

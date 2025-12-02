@@ -65,20 +65,16 @@ tios_reporter = ommutils.TiosMqttReporter(
 simulation.reporters.append(tios_reporter)
 
 while True:
-    
-    # Wait for a 'poke' to start the simulation
+
     now = time.time()
-    print('Waiting for a poke to start the simulation...')
-    while client._poketime is None or client._poketime < now:
+    if client._poketime is None or now - client._poketime > 60:
+        # Wait for a 'poke' to start the simulation
+        print('Waiting for a poke to start the simulation...')
         time.sleep(5.0)
-    print('Poke received, starting simulation!')
-    # Now run MD:
-    last_start = time.time()
-    timeout = 300  # seconds
-    while last_start - client._poketime < timeout:
+    else:
+        # Now run MD:
         n_steps = 20000
         print(f'Running {n_steps} MD steps, saving data every {report_interval} steps')
-        last_start = time.time()
         simulation.step(n_steps)
 
 # A final mqtt_tios cleanup (optional but polite):
