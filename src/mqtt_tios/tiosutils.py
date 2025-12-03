@@ -16,7 +16,6 @@ def interruptable_get(client, timeout=None):
     time_left = timeout or 1
     while time_left > 0 and client.states.qsize() == 0 and not killer.kill_now:
         sleep(1)
-        client.poke()
         if timeout:
             time_left -= 1
     if client.states.empty():
@@ -150,10 +149,12 @@ def get_simulations(broker_address=None, port=None, timeout=10):
     sleep(timeout)
     simulations = {}
     for k in client.status:
-        simulations[k] = {'status': client.status[k].decode(), 'summary': '(not available)'}
+        simulations[k] = {'status': client.status[k].decode(),
+                          'summary': '(not available)'}
     for k in client.summary:
-        if not k in simulations:
-            simulations[k] = {'status': '(unknown)', 'summary': client.summary[k].decode()}
+        if k not in simulations:
+            simulations[k] = {'status': '(unknown)',
+                              'summary': client.summary[k].decode()}
         else:
             simulations[k]['summary'] = client.summary[k].decode()
     

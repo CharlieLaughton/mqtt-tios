@@ -1,4 +1,5 @@
 """ ommutils.py: tios integrations for OpenMM simulations """
+from time import sleep
 import zlib
 import json
 from io import StringIO
@@ -12,6 +13,7 @@ from openmm.app import PDBFile, Simulation
 from openmm.unit import picosecond
 
 sys.tracebacklimit = None  # suppress traceback for ConnectionError
+
 
 def serialize_simulation(simulation):
     """Serialize an OpenMM simulation.
@@ -75,7 +77,8 @@ class TiosMqttReporter():
                  checkpointInterval=None,
                  summary=None,
                  enforcePeriodicBox=None,
-                 exists_ok=False):
+                 exists_ok=False,
+                 subscriber_controlled=False):
         """Initialize the MQTT reporter.
         Parameters
         ----------
@@ -91,10 +94,12 @@ class TiosMqttReporter():
             If True, wrap coordinates to be within the periodic box.
         exists_ok : bool, optional
             If True, any existing data for this simulation will be overwritten
+        subscriber_controlled : bool, optional
+            If True, the simulation will pause if no subscribers are connected.
         """
         if not isinstance(client, TiosPublisher):
             raise ValueError('Error: client must be a TiosPublisher')
-        
+
         if checkpointInterval is not None and checkpointInterval % reportInterval != 0:
             raise ValueError('Error: checkpointInterval must be a multiple of reportInterval')
         self._client = client
@@ -102,6 +107,7 @@ class TiosMqttReporter():
         self._checkpointInterval = checkpointInterval
         self._summary = summary
         self._enforcePeriodicBox = enforcePeriodicBox
+        self._subscriber_controlled = subscriber_controlled
 
         if self._client.summary is not None:
             self._new = False
@@ -156,7 +162,9 @@ class TiosMqttReporter():
               simulation.currentStep - self._last_checkpoint_step >= self._checkpointInterval):
             self.checkpoint_simulation(simulation)
             self._last_checkpoint_step = simulation.currentStep
-
+        if self._subscriber_controlled:
+            while not self._client.has_subscribers:
+                sleep(1)
         positions = state.getPositions(asNumpy=True)
         box = state.getPeriodicBoxVectors(asNumpy=True)
         t = state.getTime().value_in_unit(picosecond)

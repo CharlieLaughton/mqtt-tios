@@ -45,17 +45,12 @@ def tios_collect_cli():
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use .xtc or .nc")
 
-
     with writer(sim_id, output_file,
                 mqtt_broker=mqtt_broker,
                 timeout=timeout, port=port) as f:
         t = tqdm(unit=" frames", total=max_frames)
         n_frames = 0
-        lastpoke = float(f._client.poke())  # Initial poke to start the simulation
         while not (f.timedout or killer.kill_now):
-            now = float(f._client.poke())
-            if now - lastpoke > timeout / 2:
-                lastpoke = float(f._client.poke())  # Send poke to keep simulation alive
             f.write_frame()
             n_frames += 1
             if max_frames and n_frames >= max_frames:
@@ -86,8 +81,10 @@ def tios_ls_cli():
                                   timeout=args.timeout)
     if len(simulations) > 0:
         print("Available simulations:")
-        sorted_sims = {k: v for k, v in sorted(simulations.items(),
-                                               key=lambda item: item[1]['status'], reverse=True)}
+        sorted_sims = {k: v for k, v in sorted(
+            simulations.items(),
+            key=lambda item: item[1]['status'],
+            reverse=True)}
 
         for simId, simData in sorted_sims.items():
             print(f" - {simId}: {simData['summary']}: {simData['status']}")

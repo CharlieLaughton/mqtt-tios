@@ -6,13 +6,16 @@ import string
 import random
 from .config import config
 
+
 def random_id():
     alphabet = string.ascii_lowercase + string.digits
     return ''.join(random.choices(alphabet, k=6))
 
+
 ONLINE = 'online'.encode('utf-8')
 OFFLINE = 'offline'.encode('utf-8')
 EOT = 'EOT'.encode('utf-8')
+
 
 class TiosPublisher():
     def __init__(self,
@@ -31,23 +34,24 @@ class TiosPublisher():
         self._state_topic = f'tios/{simId}/state'
         self._summary_topic = f'tios/{simId}/summary'
         self._checkpoint_topic = f'tios/{simId}/checkpoint'
-        self._poke_topic = f'tios/{simId}/poke'
+        self._subscribed_topic = f'tios/{simId}/subscribed'
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                                  client_id='tios_publisher' + random_id())
+                                   client_id='tios_publisher' + random_id())
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
         username = username or config.username
         password = password or config.password
         self._client.username_pw_set(username, password)
-        self._client.will_set(self._status_topic, payload=OFFLINE, qos=1, retain=True)
+        self._client.will_set(self._status_topic, payload=OFFLINE, qos=1,
+                              retain=True)
 
         self._status = None
         self._summary = None
         self._checkpoint = None
         self._state = None
-        self._poketime = None
+        self.has_subscribers = None
 
         # Connect to the broker
         try:
@@ -56,7 +60,6 @@ class TiosPublisher():
             print(f'Failed to connect to {self.broker_address}:{self.port}')
             raise
         self._client.loop_start()
-        
 
     @property
     def status(self):
@@ -106,32 +109,33 @@ class TiosPublisher():
     @property
     def state(self):
         return self._state
-        
+
     @state.setter
     def state(self, new_state):
         if not isinstance(new_state, bytes):
             raise ValueError('Error - value must be bytes')
         self._client.publish(self._state_topic,
-                         payload=new_state,
-                         qos=1, retain=False)
+                             payload=new_state,
+                             qos=1, retain=False)
         self._state = new_state
         if self.verbose:
             print('New state published')
 
-        
     def _on_connect(self, client, userdata, mid, reason_code, properties):
         if reason_code != 0:
-            raise ConnectionError(f'Error - connection failed, reason code={reason_code}')
-        
+            raise ConnectionError(
+                f'Error - connection failed, reason code={reason_code}')
+
         self.status = ONLINE
-        self._client.subscribe(self._poke_topic)
+        self._client.subscribe(self._subscribed_topic)
         if self.verbose:
             print(f"Connected to MQTT broker at {self.broker_address}:{self.port}")
 
     def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         for reason_code in reason_code_list:
             if reason_code == 128:
-                raise ConnectionError(f'Error - subscription failed, reason={reason_code}')
+                raise ConnectionError(
+                    f'Error - subscription failed, reason={reason_code}')
             if self.verbose:
                 print(f'Subscription succesful {reason_code}')
 
@@ -139,10 +143,10 @@ class TiosPublisher():
         if self.verbose:
             print(f"Received message on topic '{msg.topic}': {len(msg.payload)} bytes")
         tag = msg.topic.split('/')[2]
-        if tag == 'poke':
-            self._poketime = float(msg.payload.decode('utf-8'))
+        if tag == 'subscribed':
+            self.has_subscribers = msg.payload.decode('utf-8') == 'True'
             if self.verbose:
-                print('Poke received')
+                print(f'Received subscription status: {self.has_subscribers} ')
 
     def close(self):
         """Close the MQTT connection."""
@@ -172,21 +176,24 @@ class TiosSubscriber():
         self._state_topic = f'tios/{simId}/state'
         self._summary_topic = f'tios/{simId}/summary'
         self._checkpoint_topic = f'tios/{simId}/checkpoint'
-        self._poke_topic = f'tios/{simId}/poke'
+        self._subscribed_topic = f'tios/{simId}/subscribed'
         
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                                  client_id='tios_subscriber' + random_id())
+                                   client_id='tios_subscriber' + random_id())
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
         self._client.username_pw_set(username=username or config.username,
                                      password=password or config.password)
-        
+        self._client.will_set(self._subscribed_topic, payload=b'False',
+                              qos=1, retain=True)
+
         self.status = None
         self.summary = None
         self.checkpoint = None
         self.state = None
         self.states = SimpleQueue()
+        self._closing = False
         
         # Connect to the broker
         self._client.connect(self.broker_address, self.port, 60)
@@ -194,19 +201,26 @@ class TiosSubscriber():
         
     def _on_connect(self, client, userdata, mid, reason_code, properties):
         if reason_code != 0:
-            raise ConnectionError(f'Error - connection failed, reason code={reason_code}')
+            raise ConnectionError(
+                f'Error - connection failed, reason code={reason_code}')
+        
+        self._client.publish(self._subscribed_topic,
+                             payload=b'True',
+                             qos=1, retain=True)
         
         self._client.subscribe([(self._status_topic, 2),
                                 (self._summary_topic, 2),
                                 (self._checkpoint_topic, 2),
-                                (self._state_topic, 2)])
+                                (self._state_topic, 2),
+                                (self._subscribed_topic, 2)])
         if self.verbose:
             print(f"Connected to MQTT broker at {self.broker_address}:{self.port}")
 
     def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         for reason_code in reason_code_list:
             if reason_code == 128:
-                raise ConnectionError(f'Error - subscription failed, reason={reason_code}')
+                raise ConnectionError(
+                    f'Error - subscription failed, reason={reason_code}')
             if self.verbose:
                 print(f'Subscription succesful {reason_code}')
 
@@ -223,22 +237,25 @@ class TiosSubscriber():
         elif tag == 'state':
             self.state = msg.payload
             self.states.put(self.state)
-
-    def poke(self):
-        timestamp = str(time.time()).encode('utf-8')
-        self._client.publish(self._poke_topic,
-                             payload=timestamp,
-                             qos=1, retain=False)
-        if self.verbose:
-            print('Poke sent')
-        return timestamp
+        elif tag == 'subscribed':
+            if msg.payload.decode('utf-8') == 'False':
+                if not self._closing:
+                    self._client.publish(self._subscribed_topic,
+                                         payload=b'True',
+                                         qos=1, retain=True)
 
     def close(self):
         """Close the MQTT connection."""
+        self._closing = True
+        self._client.publish(self._subscribed_topic,
+                             payload=b'False',
+                             qos=1, retain=True)
+        time.sleep(1)
         self._client.disconnect()
         self._client.loop_stop()
         if self.verbose:
             print('Client closed')
+
 
 class TiosMonitor():
     def __init__(self,
@@ -248,7 +265,7 @@ class TiosMonitor():
                  username=None,
                  password=None,
                  verbose=False):
-        
+
         self.broker_address = broker_address or config.broker
         self.port = port or config.port
         self.verbose = verbose
@@ -280,7 +297,8 @@ class TiosMonitor():
         
     def _on_connect(self, client, userdata, mid, reason_code, properties):
         if reason_code != 0:
-            raise ConnectionError(f'Error - connection failed, reason code={reason_code}')
+            raise ConnectionError(
+                f'Error - connection failed, reason code={reason_code}')
         
         self._client.subscribe(self.topics)
         if self.verbose:
@@ -289,7 +307,8 @@ class TiosMonitor():
     def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
         for reason_code in reason_code_list:
             if reason_code == 128:
-                raise ConnectionError(f'Error - subscription failed, reason={reason_code}')
+                raise ConnectionError(
+                    f'Error - subscription failed, reason={reason_code}')
             if self.verbose:
                 print(f'Subscription succesful {reason_code}')
 
@@ -316,7 +335,7 @@ class TiosMonitor():
         self.summary = {}
         for topic in self.topics:
             self._client.subscribe(topic)
-            
+
     def close(self):
         """Close the MQTT connection."""
         self._client.disconnect()

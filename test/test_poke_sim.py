@@ -55,27 +55,18 @@ checkpoint_interval = 5000
 client = clients.TiosPublisher(sim_id)
 time.sleep(2)
 
-# Create an OpenMM Reporter:
+# Create an OpenMM Reporter that is "subscriber sensitive":
 tios_reporter = ommutils.TiosMqttReporter(
     client,
     report_interval,
     checkpointInterval=checkpoint_interval,
-    exists_ok=True)
+    exists_ok=True,
+    subscriber_controlled=True)
 
 simulation.reporters.append(tios_reporter)
 
+n_steps = 20000
 while True:
-
-    now = time.time()
-    if client._poketime is None or now - client._poketime > 60:
-        # Wait for a 'poke' to start the simulation
-        print('Waiting for a poke to start the simulation...')
-        time.sleep(5.0)
-    else:
-        # Now run MD:
-        n_steps = 20000
         print(f'Running {n_steps} MD steps, saving data every {report_interval} steps')
         simulation.step(n_steps)
 
-# A final mqtt_tios cleanup (optional but polite):
-tios_reporter.close()
