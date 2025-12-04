@@ -1,4 +1,5 @@
 """ clients.py: Mqtt-based clients for Tios """
+
 import paho.mqtt.client as mqtt
 import time
 from queue import SimpleQueue
@@ -8,6 +9,7 @@ from .config import config
 
 
 def random_id():
+    """ Generate a random client ID suffix."""
     alphabet = string.ascii_lowercase + string.digits
     return ''.join(random.choices(alphabet, k=6))
 
@@ -18,6 +20,23 @@ EOT = 'EOT'.encode('utf-8')
 
 
 class TiosPublisher():
+    """ MQTT publisher client for Tios 
+    
+    Attributes:
+        simId (str): Simulation ID.
+        broker_address (str): Address of the MQTT broker.
+        port (int): Port number of the MQTT broker.
+        verbose (bool): If True, print verbose output.
+    
+    Properties:
+        status (bytes): Current status of the simulation.
+        summary (bytes): Summary information of the simulation.
+        checkpoint (bytes): Checkpoint data of the simulation.
+        state (bytes): Current state data of the simulation.
+
+    Methods:
+        close(): Close the MQTT connection."""
+
     def __init__(self,
                  simId,
                  broker_address=None,
@@ -162,6 +181,24 @@ class TiosPublisher():
 
 
 class TiosSubscriber():
+    """ MQTT subscriber client for Tios
+
+    Attributes:
+        simId (str): Simulation ID.
+        broker_address (str): Address of the MQTT broker.
+        port (int): Port number of the MQTT broker.
+        verbose (bool): If True, print verbose output.
+
+    Properties:
+        status (bytes): Current status of the simulation.
+        summary (bytes): Summary information of the simulation.
+        checkpoint (bytes): Checkpoint data of the simulation.
+        state (bytes): Current state data of the simulation.
+        states (SimpleQueue): Queue of received state data.
+
+    Methods:
+        close(): Close the MQTT connection.
+    """
     def __init__(self,
                  simId,
                  broker_address=None,
@@ -262,6 +299,23 @@ class TiosSubscriber():
 
 
 class TiosMonitor():
+    """ MQTT monitor client for Tios simulations
+    
+    Attributes:
+        simIds (list): List of simulation IDs to monitor.
+        broker_address (str): Address of the MQTT broker.
+        port (int): Port number of the MQTT broker.
+        verbose (bool): If True, print verbose output.
+
+    Properties:
+        status (dict): Dictionary of simulation statuses.
+        summary (dict): Dictionary of simulation summaries.
+        subscribed (dict): Dictionary of subscription statuses.
+
+    Methods:
+        delete(simId): Delete a simulation by its ID.
+        refresh(): Refresh the list of subscriptions.
+    """
     def __init__(self,
                  simIds=None,
                  broker_address=None,

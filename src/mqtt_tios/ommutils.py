@@ -1,4 +1,5 @@
 """ ommutils.py: tios integrations for OpenMM simulations """
+
 from time import sleep
 import zlib
 import json
@@ -67,14 +68,39 @@ def deserialize_simulation(simulation_data):
 
 
 def retrieve_checkpoint(client):
-    """Retrieve a checkpoint of a simulation from the broker"""
+    """Retrieve a checkpoint of a simulation from the broker
+    Args:
+        client (TiosSubscriber): The MQTT client
+    Returns:
+        simulation: An OpenMM simulation object."""
+    
     if client.checkpoint is None:
         raise ValueError(f'Error: Simulation {client.simId} has no checkpoint')
     return deserialize_simulation(client.checkpoint)
 
 
 class TiosMqttReporter():
-    """A reporter that sends OpenMM simulation data via MQTT."""
+    """A reporter that sends OpenMM simulation data via MQTT.
+    
+    Parameters
+    ----------
+    client : TiosPublisher
+        The MQTT client
+    reportInterval : int
+        The interval (in steps) at which to report simulation data.
+    checkpointInterval : int, optional
+        The interval (in steps) at which to checkpoint the simulation.
+    summary : str, optional
+        An optional summary description of the simulation.
+    enforcePeriodicBox : bool, optional
+        If True, wrap coordinates to be within the periodic box.
+    exists_ok : bool, optional
+        If True, any existing data for this simulation will be overwritten
+    on_demand : bool, optional
+        If True, the simulation will pause if no subscribers are connected.
+    verbose : bool, optional
+        If True, print status messages to the console.
+    """
     def __init__(self, client, reportInterval,
                  checkpointInterval=None,
                  summary=None,

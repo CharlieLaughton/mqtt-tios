@@ -1,4 +1,5 @@
 """ tiosutils.py: lower-level routines for command-line tools """
+
 from time import sleep
 import zlib
 import json
@@ -15,7 +16,20 @@ EOT = 'EOT'.encode('utf-8')
 
 
 def get_topology(client, timeout=10):
-    """ Get the (MDTraj) topology from the publisher via MQTT """
+    """ Get the (MDTraj) topology from the publisher via MQTT 
+    
+    Parameters
+    ----------
+    client : TiosSubscriber
+        The MQTT client subscribed to the simulation.
+    timeout : int
+        Timeout in seconds to wait for the topology checkpoint. 
+        
+    Returns
+    -------
+    topology : mdtraj.Topology
+        The MDTraj topology object obtained from the publisher.
+    """
     time_left = timeout
     while time_left > 0 and client.checkpoint is None and not killer.kill_now:
         sleep(1)
@@ -31,7 +45,7 @@ def get_topology(client, timeout=10):
     return topology
 
 
-def interruptable_get(client, timeout=None):
+def _interruptable_get(client, timeout=None):
     """ A get that can be interrupted"""
     time_left = timeout or 1
     while time_left > 0 and client.states.qsize() == 0 and not killer.kill_now:
@@ -45,6 +59,28 @@ def interruptable_get(client, timeout=None):
 
 
 class TiosPDBWriter():
+    """ Write frames from a TIOS simulation to PDB files. 
+
+    Parameters
+    ----------
+    sim_id : str
+        The simulation ID to subscribe to.
+    pdbfilename : str
+        The PDB filename pattern to write frames to. Can include
+        a '{frame}' placeholder for the frame number. Otherwise the same filename
+        is used for all frames.
+    mqtt_broker : str, optional
+        The address of the MQTT broker. If None, uses the default from config.
+    port : int, optional
+        The port number of the MQTT broker. If None, uses the default from config.
+    timeout : int, optional
+        Timeout in seconds for waiting for new frames. Default is 60.
+
+    Methods:
+        write_frame(): write the next frame to a PDB file.
+        close(): close the MQTT client.
+    
+    """
     def __init__(self, sim_id, pdbfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
@@ -63,7 +99,7 @@ class TiosPDBWriter():
 
     def write_frame(self):
 
-        zdata = interruptable_get(self._client, timeout=self.timeout)
+        zdata = _interruptable_get(self._client, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
@@ -121,7 +157,7 @@ class TiosXTCWriter():
 
     def write_frame(self):
 
-        zdata = interruptable_get(self._client, timeout=self.timeout)
+        zdata = _interruptable_get(self._client, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
@@ -160,6 +196,24 @@ class TiosXTCWriter():
 
 
 class TiosNCWriter():
+    """ Write frames from a TIOS simulation to NetCDF files.
+
+    Parameters
+    ----------
+    sim_id : str
+        The simulation ID to subscribe to.
+    ncfilename : str
+        The NetCDF filename to write frames to.
+    mqtt_broker : str, optional
+        The address of the MQTT broker. If None, uses the default from config.
+    port : int, optional
+        The port number of the MQTT broker. If None, uses the default from config.
+    timeout : int, optional
+        Timeout in seconds for waiting for new frames. Default is 60.   
+    Methods:
+        write_frame(): write the next frame to the NetCDF file.
+        close(): close the MQTT client and the NetCDF file."""
+    
     def __init__(self, sim_id, ncfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
@@ -177,8 +231,7 @@ class TiosNCWriter():
         self.saved_frames = 0
 
     def write_frame(self):
-
-        zdata = interruptable_get(self._client, timeout=self.timeout)
+        zdata = _interruptable_get(self._client, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
             self.timedout = True
@@ -219,6 +272,21 @@ class TiosNCWriter():
 
 
 def get_simulations(broker_address=None, port=None, timeout=10):
+    """ Get the list of available simulations from an MQTT broker.
+    Parameters
+    ----------
+    broker_address : str, optional
+        The address of the MQTT broker. If None, uses the default from config.
+    port : int, optional
+        The port number of the MQTT broker. If None, uses the default from config.
+    timeout : int, optional
+        Timeout in seconds to wait for simulations. Default is 10.
+    Returns
+    -------
+    simulations : dict
+        A dictionary with simulation IDs as keys and dictionaries with
+        'status', 'summary', and 'subscribed' as values.
+    """
 
     broker_address = broker_address or config.broker
     port = port or config.port

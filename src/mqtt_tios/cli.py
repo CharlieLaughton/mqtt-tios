@@ -1,4 +1,4 @@
-""" cli.py: command line tools: tios_ls and tios_write """
+""" cli.py: command line tools: tios_ls and tios_collect """
 
 from .tiosutils import TiosXTCWriter, TiosNCWriter, TiosPDBWriter
 from ._version import __version__
