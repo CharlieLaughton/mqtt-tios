@@ -1,7 +1,10 @@
 """ tiosutils.py: lower-level routines for command-line tools """
 from time import sleep
 import zlib
+import json
+from tempfile import NamedTemporaryFile
 import numpy as np
+import mdtraj as mdt
 from mdtraj.utils import box_vectors_to_lengths_and_angles
 from mdtraj.formats import NetCDFTrajectoryFile, XTCTrajectoryFile
 from .clients import TiosSubscriber, TiosMonitor
@@ -9,6 +12,23 @@ from .config import config
 from .control import killer
 
 EOT = 'EOT'.encode('utf-8')
+
+
+def get_topology(client, timeout=10):
+    """ Get the (MDTraj) topology from the publisher via MQTT """
+    time_left = timeout
+    while time_left > 0 and client.checkpoint is None and not killer.kill_now:
+        sleep(1)
+        time_left -= 1
+    if client.checkpoint is None:
+        raise TimeoutError('Timeout waiting for topology')
+    metadata = json.loads(client.checkpoint)
+    with NamedTemporaryFile('w+', suffix='.pdb', delete=True) as f:
+        f.write(metadata['pdbdata'])
+        f.flush()
+        f.seek(0)
+        topology = mdt.load_pdb(f.name).topology
+    return topology
 
 
 def interruptable_get(client, timeout=None):
@@ -56,9 +76,9 @@ class TiosXTCWriter():
 
         try:
             data = zlib.decompress(zdata)
-        except:
+        except Exception as e:
             print(f'Error decompressing {zdata}')
-            raise
+            raise e
         self.framebuffer = np.frombuffer(
             data,
             dtype=np.float32).reshape((-1, 3))
@@ -99,7 +119,7 @@ class TiosNCWriter():
         self.saved_frames = 0
 
     def write_frame(self):
-        
+
         zdata = interruptable_get(self._client, timeout=self.timeout)
         if zdata is None:
             print('Timeout waiting for frame')
@@ -112,9 +132,9 @@ class TiosNCWriter():
             return
         try:
             data = zlib.decompress(zdata)
-        except:
-            print('Error decompressing {zdata}')
-            raise
+        except Exception as e:
+            print(f'Error decompressing {zdata}')
+            raise e
         self.framebuffer = np.frombuffer(
             data,
             dtype=np.float32).reshape((-1, 3))
@@ -150,12 +170,25 @@ def get_simulations(broker_address=None, port=None, timeout=10):
     simulations = {}
     for k in client.status:
         simulations[k] = {'status': client.status[k].decode(),
-                          'summary': '(not available)'}
+                          'summary': '(not available)',
+                          'subscribed': False}
     for k in client.summary:
         if k not in simulations:
             simulations[k] = {'status': '(unknown)',
                               'summary': client.summary[k].decode()}
         else:
             simulations[k]['summary'] = client.summary[k].decode()
-    
+
+    for k in client.subscribed:
+        if client.subscribed[k]:
+            state = 'running'
+        else:
+            state = 'stopped'
+        if k not in simulations:
+            simulations[k] = {'status': state,
+                              'summary': '(not available)'}
+        else:
+            if simulations[k]['status'] == 'online':
+                simulations[k]['status'] = state
+    client.close()
     return simulations

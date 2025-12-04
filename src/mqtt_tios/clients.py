@@ -19,7 +19,7 @@ EOT = 'EOT'.encode('utf-8')
 
 class TiosPublisher():
     def __init__(self,
-                 simId, 
+                 simId,
                  broker_address=None,
                  port=None,
                  username=None,
@@ -37,7 +37,7 @@ class TiosPublisher():
         self._subscribed_topic = f'tios/{simId}/subscribed'
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                                   client_id='tios_publisher' + random_id())
+                                   client_id='tios_publisher_' + random_id())
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
@@ -56,9 +56,9 @@ class TiosPublisher():
         # Connect to the broker
         try:
             self._client.connect(self.broker_address, self.port, 60)
-        except:
+        except Exception as e:
             print(f'Failed to connect to {self.broker_address}:{self.port}')
-            raise
+            raise e
         self._client.loop_start()
 
     @property
@@ -90,7 +90,7 @@ class TiosPublisher():
         self._summary = new_summary
         if self.verbose:
             print(f'Summary updated to {self._summary}')
-    
+
     @property
     def checkpoint(self):
         return self._checkpoint
@@ -129,9 +129,10 @@ class TiosPublisher():
         self.status = ONLINE
         self._client.subscribe(self._subscribed_topic)
         if self.verbose:
-            print(f"Connected to MQTT broker at {self.broker_address}:{self.port}")
+            print(f"Connected to broker at {self.broker_address}:{self.port}")
 
-    def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
+    def _on_subscribe(self, client, userdata, mid,
+                      reason_code_list, properties):
         for reason_code in reason_code_list:
             if reason_code == 128:
                 raise ConnectionError(
@@ -141,7 +142,8 @@ class TiosPublisher():
 
     def _on_message(self, client, userdata, msg):
         if self.verbose:
-            print(f"Received message on topic '{msg.topic}': {len(msg.payload)} bytes")
+            print(f"Received message on topic '{msg.topic}': "
+                  f"{len(msg.payload)} bytes")
         tag = msg.topic.split('/')[2]
         if tag == 'subscribed':
             self.has_subscribers = msg.payload.decode('utf-8') == 'True'
@@ -161,7 +163,7 @@ class TiosPublisher():
 
 class TiosSubscriber():
     def __init__(self,
-                 simId, 
+                 simId,
                  broker_address=None,
                  port=None,
                  username=None,
@@ -177,9 +179,9 @@ class TiosSubscriber():
         self._summary_topic = f'tios/{simId}/summary'
         self._checkpoint_topic = f'tios/{simId}/checkpoint'
         self._subscribed_topic = f'tios/{simId}/subscribed'
-        
+
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                                   client_id='tios_subscriber' + random_id())
+                                   client_id='tios_subscriber_' + random_id())
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
@@ -194,29 +196,30 @@ class TiosSubscriber():
         self.state = None
         self.states = SimpleQueue()
         self._closing = False
-        
+
         # Connect to the broker
         self._client.connect(self.broker_address, self.port, 60)
         self._client.loop_start()
-        
+
     def _on_connect(self, client, userdata, mid, reason_code, properties):
         if reason_code != 0:
             raise ConnectionError(
                 f'Error - connection failed, reason code={reason_code}')
-        
+
         self._client.publish(self._subscribed_topic,
                              payload=b'True',
                              qos=1, retain=True)
-        
+
         self._client.subscribe([(self._status_topic, 2),
                                 (self._summary_topic, 2),
                                 (self._checkpoint_topic, 2),
                                 (self._state_topic, 2),
                                 (self._subscribed_topic, 2)])
         if self.verbose:
-            print(f"Connected to MQTT broker at {self.broker_address}:{self.port}")
+            print(f"Connected to broker at {self.broker_address}:{self.port}")
 
-    def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
+    def _on_subscribe(self, client, userdata, mid,
+                      reason_code_list, properties):
         for reason_code in reason_code_list:
             if reason_code == 128:
                 raise ConnectionError(
@@ -226,7 +229,8 @@ class TiosSubscriber():
 
     def _on_message(self, client, userdata, msg):
         if self.verbose:
-            print(f"Received message on topic '{msg.topic}': {len(msg.payload)} bytes")
+            print(f"Received message on topic '{msg.topic}': "
+                  f"{len(msg.payload)} bytes")
         tag = msg.topic.split('/')[2]
         if tag == 'status':
             self.status = msg.payload
@@ -273,38 +277,41 @@ class TiosMonitor():
         self.topics = []
         if simIds is None:
             simIds = ['+']
-            
+
         if not isinstance(simIds, list):
             simIds = [simIds]
         for simId in simIds:
             self.topics.append((f'tios/{simId}/status', 2))
             self.topics.append((f'tios/{simId}/summary', 2))
-                
+            self.topics.append((f'tios/{simId}/subscribed', 2))
+
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                                  client_id='tios_monitor' + random_id())
+                                   client_id='tios_monitor_' + random_id())
         self._client.on_connect = self._on_connect
         self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
         self._client.username_pw_set(username=username or config.username,
                                      password=password or config.password)
-        
+
         self.status = {}
         self.summary = {}
-        
+        self.subscribed = {}
+
         # Connect to the broker
         self._client.connect(self.broker_address, self.port, 60)
         self._client.loop_start()
-        
+
     def _on_connect(self, client, userdata, mid, reason_code, properties):
         if reason_code != 0:
             raise ConnectionError(
                 f'Error - connection failed, reason code={reason_code}')
-        
+
         self._client.subscribe(self.topics)
         if self.verbose:
-            print(f"Connected to MQTT broker at {self.broker_address}:{self.port}")
+            print(f"Connected to broker at {self.broker_address}:{self.port}")
 
-    def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
+    def _on_subscribe(self, client, userdata, mid,
+                      reason_code_list, properties):
         for reason_code in reason_code_list:
             if reason_code == 128:
                 raise ConnectionError(
@@ -314,17 +321,22 @@ class TiosMonitor():
 
     def _on_message(self, client, userdata, msg):
         if self.verbose:
-            print(f"Received message on topic '{msg.topic}': {len(msg.payload)} bytes") 
+            print(f"Received message on topic '{msg.topic}': "
+                  f"{len(msg.payload)} bytes")
         _, simId, tag = msg.topic.split('/')
         if tag == 'status':
             self.status[simId] = msg.payload
         elif tag == 'summary':
             self.summary[simId] = msg.payload
+        elif tag == 'subscribed':
+            self.subscribed[simId] = msg.payload.decode('utf-8') == 'True'
 
     def delete(self, simId):
         self._client.publish(f'tios/{simId}/status', b'', retain=True)
         self._client.publish(f'tios/{simId}/checkpoint', b'', retain=True)
         self._client.publish(f'tios/{simId}/summary', b'', retain=True)
+        self._client.publish(f'tios/{simId}/subscribed', b'', retain=True)
+        self._client.publish(f'tios/{simId}/state', b'', retain=True)
         if self.verbose:
             print(f'Simulation {simId} deleted')
 
@@ -333,6 +345,7 @@ class TiosMonitor():
             self._client.unsubscribe(topic[0])
         self.status = {}
         self.summary = {}
+        self.subscribed = {}
         for topic in self.topics:
             self._client.subscribe(topic)
 

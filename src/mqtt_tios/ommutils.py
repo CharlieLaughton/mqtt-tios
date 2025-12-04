@@ -78,7 +78,7 @@ class TiosMqttReporter():
                  summary=None,
                  enforcePeriodicBox=None,
                  exists_ok=False,
-                 subscriber_controlled=False):
+                 on_demand=True):
         """Initialize the MQTT reporter.
         Parameters
         ----------
@@ -94,31 +94,34 @@ class TiosMqttReporter():
             If True, wrap coordinates to be within the periodic box.
         exists_ok : bool, optional
             If True, any existing data for this simulation will be overwritten
-        subscriber_controlled : bool, optional
+        on_demand : bool, optional
             If True, the simulation will pause if no subscribers are connected.
         """
         if not isinstance(client, TiosPublisher):
             raise ValueError('Error: client must be a TiosPublisher')
 
-        if checkpointInterval is not None and checkpointInterval % reportInterval != 0:
-            raise ValueError('Error: checkpointInterval must be a multiple of reportInterval')
+        if checkpointInterval is not None:
+            if checkpointInterval % reportInterval != 0:
+                raise ValueError('Error: checkpointInterval must be a '
+                                 'multiple of reportInterval')
         self._client = client
         self._reportInterval = reportInterval
         self._checkpointInterval = checkpointInterval
         self._summary = summary
         self._enforcePeriodicBox = enforcePeriodicBox
-        self._subscriber_controlled = subscriber_controlled
+        self._on_demand = on_demand
 
         if self._client.summary is not None:
             self._new = False
             if not exists_ok:
-                raise ValueError(f'Simulation ID {self._client.simId} already exists.')
+                raise ValueError(
+                    f'Simulation ID {self._client.simId} already exists.')
         else:
             self._new = True
 
         self._framebuffer = None
         self._first_report = True
-        
+
     def describeNextReport(self, simulation):
         """Get information about the next report this object will generate.
 
@@ -159,10 +162,11 @@ class TiosMqttReporter():
             self._last_checkpoint_step = simulation.currentStep
             self._first_report = False
         elif (self._checkpointInterval is not None and
-              simulation.currentStep - self._last_checkpoint_step >= self._checkpointInterval):
+              (simulation.currentStep - self._last_checkpoint_step
+               >= self._checkpointInterval)):
             self.checkpoint_simulation(simulation)
             self._last_checkpoint_step = simulation.currentStep
-        if self._subscriber_controlled:
+        if self._on_demand:
             while not self._client.has_subscribers:
                 sleep(1)
         positions = state.getPositions(asNumpy=True)
@@ -198,7 +202,8 @@ class TiosMqttReporter():
 
         """
         if summary is None:
-            summary = f'OpenMM simulation with {simulation.context.getSystem().getNumParticles()} atoms.'
+            n_atoms = simulation.context.getSystem().getNumParticles()
+            summary = f'OpenMM simulation with {n_atoms} atoms.'
         self._client.summary = summary.encode('utf-8')
         self.simId = self._client.simId
         self.checkpoint_simulation(simulation)

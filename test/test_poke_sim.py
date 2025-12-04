@@ -61,7 +61,7 @@ tios_reporter = ommutils.TiosMqttReporter(
     report_interval,
     checkpointInterval=checkpoint_interval,
     exists_ok=True,
-    subscriber_controlled=True)
+    on_demand=True)
 
 simulation.reporters.append(tios_reporter)
 
