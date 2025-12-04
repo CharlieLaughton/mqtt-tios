@@ -20,14 +20,14 @@ EOT = 'EOT'.encode('utf-8')
 
 
 class TiosPublisher():
-    """ MQTT publisher client for Tios 
-    
+    """ MQTT publisher client for Tios
+
     Attributes:
         simId (str): Simulation ID.
         broker_address (str): Address of the MQTT broker.
         port (int): Port number of the MQTT broker.
         verbose (bool): If True, print verbose output.
-    
+
     Properties:
         status (bytes): Current status of the simulation.
         summary (bytes): Summary information of the simulation.
@@ -300,7 +300,7 @@ class TiosSubscriber():
 
 class TiosMonitor():
     """ MQTT monitor client for Tios simulations
-    
+
     Attributes:
         simIds (list): List of simulation IDs to monitor.
         broker_address (str): Address of the MQTT broker.

@@ -16,15 +16,15 @@ EOT = 'EOT'.encode('utf-8')
 
 
 def get_topology(client, timeout=10):
-    """ Get the (MDTraj) topology from the publisher via MQTT 
-    
+    """ Get the (MDTraj) topology from the publisher via MQTT
+
     Parameters
     ----------
     client : TiosSubscriber
         The MQTT client subscribed to the simulation.
     timeout : int
-        Timeout in seconds to wait for the topology checkpoint. 
-        
+        Timeout in seconds to wait for the topology checkpoint.
+
     Returns
     -------
     topology : mdtraj.Topology
@@ -59,7 +59,7 @@ def _interruptable_get(client, timeout=None):
 
 
 class TiosPDBWriter():
-    """ Write frames from a TIOS simulation to PDB files. 
+    """ Write frames from a TIOS simulation to PDB files.
 
     Parameters
     ----------
@@ -67,19 +67,20 @@ class TiosPDBWriter():
         The simulation ID to subscribe to.
     pdbfilename : str
         The PDB filename pattern to write frames to. Can include
-        a '{frame}' placeholder for the frame number. Otherwise the same filename
-        is used for all frames.
+        a '{frame}' placeholder for the frame number. Otherwise the same
+        filename is used for all frames.
     mqtt_broker : str, optional
         The address of the MQTT broker. If None, uses the default from config.
     port : int, optional
-        The port number of the MQTT broker. If None, uses the default from config.
+        The port number of the MQTT broker. If None, uses the default from
+        config.
     timeout : int, optional
         Timeout in seconds for waiting for new frames. Default is 60.
 
     Methods:
         write_frame(): write the next frame to a PDB file.
         close(): close the MQTT client.
-    
+
     """
     def __init__(self, sim_id, pdbfilename, mqtt_broker=None, port=None,
                  timeout=60):
@@ -207,13 +208,14 @@ class TiosNCWriter():
     mqtt_broker : str, optional
         The address of the MQTT broker. If None, uses the default from config.
     port : int, optional
-        The port number of the MQTT broker. If None, uses the default from config.
+        The port number of the MQTT broker. If None, uses the default from
+        config.
     timeout : int, optional
-        Timeout in seconds for waiting for new frames. Default is 60.   
+        Timeout in seconds for waiting for new frames. Default is 60.
     Methods:
         write_frame(): write the next frame to the NetCDF file.
         close(): close the MQTT client and the NetCDF file."""
-    
+
     def __init__(self, sim_id, ncfilename, mqtt_broker=None, port=None,
                  timeout=60):
         # Set the broker address and port
@@ -278,7 +280,8 @@ def get_simulations(broker_address=None, port=None, timeout=10):
     broker_address : str, optional
         The address of the MQTT broker. If None, uses the default from config.
     port : int, optional
-        The port number of the MQTT broker. If None, uses the default from config.
+        The port number of the MQTT broker. If None, uses the default from
+        config.
     timeout : int, optional
         Timeout in seconds to wait for simulations. Default is 10.
     Returns

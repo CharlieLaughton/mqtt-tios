@@ -73,7 +73,7 @@ def retrieve_checkpoint(client):
         client (TiosSubscriber): The MQTT client
     Returns:
         simulation: An OpenMM simulation object."""
-    
+
     if client.checkpoint is None:
         raise ValueError(f'Error: Simulation {client.simId} has no checkpoint')
     return deserialize_simulation(client.checkpoint)
@@ -81,7 +81,7 @@ def retrieve_checkpoint(client):
 
 class TiosMqttReporter():
     """A reporter that sends OpenMM simulation data via MQTT.
-    
+
     Parameters
     ----------
     client : TiosPublisher
