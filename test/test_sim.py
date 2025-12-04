@@ -3,6 +3,8 @@
 """
 Test script to run an OpenMM simulation and publish snapshots via MQTT.
 
+This version demonstrates using a client to 'poke' the simulation into action.
+
 Before you run this, make sure you have access to an MQTT broker and
 have set the environment variables TIOSBROKER and TIOSPORT, e.g.:
 
@@ -58,20 +60,29 @@ tios_reporter = ommutils.TiosMqttReporter(
     client,
     report_interval,
     checkpointInterval=checkpoint_interval,
-    exists_ok=True)
+    exists_ok=True,
+    verbose=True)
 
-# End of mqtt_tios integration
-
-# Back to standard OpenMM:
-# Attach the reporter to the simulation:
+# Add the reporter to the simulation and then start MD cycles:
 simulation.reporters.append(tios_reporter)
+print('tios-reporter added to simulation.')
+print('Snapshots will be published every', report_interval, 'steps.')
+print('A checkpoint will be saved every', checkpoint_interval, 'steps.')
 
-# Now run MD:
-n_steps = int(input('Enter number of MD steps to run (0 = terminate): '))
-while n_steps > 0:
-    print(f'Running {n_steps} MD steps, saving data every {report_interval} steps')
-    simulation.step(n_steps)
-    n_steps = int(input('Enter no. of further steps to run (0 = terminate): '))
+n_steps = int(input('Enter number of MD steps to run (0 = indefinite): '))
+indefinite = n_steps == 0
+if indefinite:
+    inc_steps = 20000
+    while True:
+        print(f'Running {inc_steps} MD steps, saving data every {report_interval} steps')
+        simulation.step(inc_steps)
+else:
+    i_step = 0
+    while i_step < n_steps:
+        inc_steps = min(20000, n_steps - i_step)
+        print(f'Running {inc_steps} MD steps, saving data every {report_interval} steps')
+        simulation.step(inc_steps)
+        i_step += inc_steps
 
-# A final mqtt_tios cleanup (optional but polite):
+# A final clean-up (optional, but polite):
 tios_reporter.close()

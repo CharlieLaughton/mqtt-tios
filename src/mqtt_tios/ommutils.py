@@ -68,6 +68,8 @@ def deserialize_simulation(simulation_data):
 
 def retrieve_checkpoint(client):
     """Retrieve a checkpoint of a simulation from the broker"""
+    if client.checkpoint is None:
+        raise ValueError(f'Error: Simulation {client.simId} has no checkpoint')
     return deserialize_simulation(client.checkpoint)
 
 
@@ -78,7 +80,8 @@ class TiosMqttReporter():
                  summary=None,
                  enforcePeriodicBox=None,
                  exists_ok=False,
-                 on_demand=True):
+                 on_demand=True,
+                 verbose=False):
         """Initialize the MQTT reporter.
         Parameters
         ----------
@@ -110,6 +113,7 @@ class TiosMqttReporter():
         self._summary = summary
         self._enforcePeriodicBox = enforcePeriodicBox
         self._on_demand = on_demand
+        self.verbose = verbose
 
         if self._client.summary is not None:
             self._new = False
@@ -167,8 +171,11 @@ class TiosMqttReporter():
             self.checkpoint_simulation(simulation)
             self._last_checkpoint_step = simulation.currentStep
         if self._on_demand:
-            while not self._client.has_subscribers:
-                sleep(1)
+            if self.verbose and not self._client.has_subscribers:
+                print('Waiting for subscribers to connect...')
+                while not self._client.has_subscribers:
+                    sleep(1)
+                print('Subscriber connected, resuming simulation.')
         positions = state.getPositions(asNumpy=True)
         box = state.getPeriodicBoxVectors(asNumpy=True)
         t = state.getTime().value_in_unit(picosecond)

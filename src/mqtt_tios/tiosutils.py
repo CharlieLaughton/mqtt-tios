@@ -44,6 +44,64 @@ def interruptable_get(client, timeout=None):
         return client.states.get()
 
 
+class TiosPDBWriter():
+    def __init__(self, sim_id, pdbfilename, mqtt_broker=None, port=None,
+                 timeout=60):
+        # Set the broker address and port
+        self.broker_address = mqtt_broker or config.broker
+        self.port = port or config.port
+        self.pdbfilename = pdbfilename
+        self.timeout = timeout
+
+        self._client = TiosSubscriber(sim_id,
+                                      broker_address=self.broker_address,
+                                      port=port)
+        self.timedout = False
+        self.framebuffer = None
+        self.saved_frames = 0
+        self.topology = get_topology(self._client)
+
+    def write_frame(self):
+
+        zdata = interruptable_get(self._client, timeout=self.timeout)
+        if zdata is None:
+            print('Timeout waiting for frame')
+            self.timedout = True
+            return
+
+        if zdata == EOT:
+            print('End of transmission')
+            self.timedout = True
+            return
+
+        try:
+            data = zlib.decompress(zdata)
+        except Exception as e:
+            print(f'Error decompressing {zdata}')
+            raise e
+        self.framebuffer = np.frombuffer(
+            data,
+            dtype=np.float32).reshape((-1, 3))
+        xyz = self.framebuffer[4:]
+        box = self.framebuffer[1:4]
+        a, b, c, alpha, beta, gamma = box_vectors_to_lengths_and_angles(*box)
+
+        traj = mdt.Trajectory(xyz, topology=self.topology,
+                              unitcell_lengths=[a, b, c],
+                              unitcell_angles=[alpha, beta, gamma])
+        traj.save_pdb(self.pdbfilename.format(frame=self.saved_frames))
+        self.saved_frames += 1
+
+    def close(self):
+        self._client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+
 class TiosXTCWriter():
     def __init__(self, sim_id, xtcfilename, mqtt_broker=None, port=None,
                  timeout=60):

@@ -1,6 +1,6 @@
 """ cli.py: command line tools: tios_ls and tios_write """
 
-from .tiosutils import TiosXTCWriter, TiosNCWriter
+from .tiosutils import TiosXTCWriter, TiosNCWriter, TiosPDBWriter
 from ._version import __version__
 from .config import config
 from tqdm import tqdm
@@ -13,7 +13,7 @@ from .control import killer
 
 def tios_collect_cli():
     parser = ArgumentParser(description="Save simulation data to"
-                            " an XTC or NetCDF file using MQTT.")
+                            " a PDB, XTC or NetCDF file using MQTT.")
     parser.add_argument("--broker", type=str,
                         default=config.broker,
                         help="The address of the MQTT broker.")
@@ -42,8 +42,11 @@ def tios_collect_cli():
         writer = TiosXTCWriter
     elif ext == '.nc':
         writer = TiosNCWriter
+    elif ext == '.pdb':
+        writer = TiosPDBWriter
     else:
-        raise ValueError(f"Unsupported file extension: {ext}. Use .xtc or .nc")
+        raise ValueError(f"Unsupported file extension: {ext}. "
+                         "Use .pdb .xtc or .nc")
 
     with writer(sim_id, output_file,
                 mqtt_broker=mqtt_broker,
