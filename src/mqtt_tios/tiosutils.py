@@ -186,7 +186,8 @@ class TiosXTCWriter():
         self.xtcfile.write(xyz, time=t, step=self.saved_frames, box=box)
 
     def close(self):
-        self.xtcfile.close()
+        if self.xtcfile is not None:
+            self.xtcfile.close()
         self._client.close()
 
     def __enter__(self):
@@ -263,7 +264,8 @@ class TiosNCWriter():
                           cell_angles=(alpha, beta, gamma))
 
     def close(self):
-        self.ncfile.close()
+        if self.ncfile is not None:
+            self.ncfile.close()
         self._client.close()
 
     def __enter__(self):
