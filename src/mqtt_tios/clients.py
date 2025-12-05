@@ -176,6 +176,11 @@ class TiosPublisher():
         time.sleep(1)
         self._client.disconnect()
         self._client.loop_stop()
+        self._status = None
+        self._summary = None
+        self._checkpoint = None
+        self._state = None
+        self.has_subscribers = None
         if self.verbose:
             print('Client closed')
 
@@ -294,6 +299,11 @@ class TiosSubscriber():
         time.sleep(1)
         self._client.disconnect()
         self._client.loop_stop()
+        self.status = None
+        self.summary = None
+        self.checkpoint = None
+        self.state = None
+        self.states = SimpleQueue()
         if self.verbose:
             print('Client closed')
 
@@ -407,5 +417,8 @@ class TiosMonitor():
         """Close the MQTT connection."""
         self._client.disconnect()
         self._client.loop_stop()
+        self.status = {}
+        self.summary = {}
+        self.subscribed = {}
         if self.verbose:
             print('Client closed')
